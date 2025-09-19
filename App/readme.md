@@ -1,6 +1,6 @@
 # bluealert
-
-Flood Alert application
+Concept:
+Alert the citizens in the periphery of a verified hazard location to help in early notifying and evacuation of citizens
 
 ## Getting Started
 
