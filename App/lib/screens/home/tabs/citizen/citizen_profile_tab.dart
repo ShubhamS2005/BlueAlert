@@ -34,6 +34,19 @@ class CitizenProfileTab extends StatelessWidget {
           ),
           const Divider(height: 40),
 
+          // --- ADDED CREDIBILITY SCORE ---
+          ListTile(
+            leading: const Icon(Icons.star_border),
+            title: const Text('Credibility Score'),
+            trailing: Text(
+              user?.credibilityScore.toString() ?? '0',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+
           // Dark Mode Toggle
           ListTile(
             leading: Icon(themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode),
@@ -45,6 +58,7 @@ class CitizenProfileTab extends StatelessWidget {
               },
             ),
           ),
+          const Divider(),
 
           // Sign Out Button
           const SizedBox(height: 20),
@@ -55,7 +69,7 @@ class CitizenProfileTab extends StatelessWidget {
             icon: const Icon(Icons.logout),
             label: const Text('Sign Out'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 50),
             ),

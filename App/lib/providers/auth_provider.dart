@@ -18,7 +18,7 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> login(String email, String password) async {
     // List of roles to attempt to log in with.
-    const List<String> rolesToTry = ['Citizen', 'Analyst', 'Admin'];
+    const List<String> rolesToTry = ['Citizen', 'Analyst'];
     Exception? lastError;
 
     for (String role in rolesToTry) {

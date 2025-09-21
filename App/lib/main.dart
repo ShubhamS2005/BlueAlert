@@ -7,19 +7,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/splash_screen.dart';
 import 'package:workmanager/workmanager.dart';
-// Import your ApiService and offline logic here if needed for background task
+import 'screens/permission_handler_screen.dart'; // Import new screen
 
+// This function needs to be a top-level function (outside of any class)
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    // TODO: Add logic here to sync offline reports.
-    // This involves initializing SharedPreferences, getting the queued reports,
-    // and sending them via the ApiService.
-    print("Native called background task: $task");
+    // In a real app, you would initialize services here and sync data.
+    print("Background task executing: $task");
     return Future.value(true);
   });
 }
-
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,22 +43,24 @@ class MyApp extends StatelessWidget {
             theme: AppThemes.lightTheme,
             darkTheme: AppThemes.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: Consumer<AuthProvider>(
-              builder: (context, auth, _) {
-                if (auth.isAuthenticated) {
-                  return const HomeScreen();
-                } else {
-                  return FutureBuilder(
-                    future: auth.tryAutoLogin(),
-                    builder: (ctx, authResultSnapshot) {
-                      if (authResultSnapshot.connectionState == ConnectionState.waiting) {
-                        return const SplashScreen();
-                      }
-                      return const AuthScreen();
-                    },
-                  );
-                }
-              },
+            home: PermissionHandlerScreen( // WRAP with PermissionHandlerScreen
+              child: Consumer<AuthProvider>(
+                builder: (context, auth, _) {
+                  if (auth.isAuthenticated) {
+                    return const HomeScreen();
+                  } else {
+                    return FutureBuilder(
+                      future: auth.tryAutoLogin(),
+                      builder: (ctx, authResultSnapshot) {
+                        if (authResultSnapshot.connectionState == ConnectionState.waiting) {
+                          return const SplashScreen();
+                        }
+                        return const AuthScreen();
+                      },
+                    );
+                  }
+                },
+              ),
             ),
           );
         },

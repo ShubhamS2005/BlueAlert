@@ -1,11 +1,11 @@
-import 'dart:io'; // Import for File
+import 'dart:io';
 import 'package:bluealert/providers/auth_provider.dart';
 import 'package:bluealert/screens/auth/verify_email_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:bluealert/constants/app_constants.dart';
-import 'package:image_picker/image_picker.dart'; // Import for ImagePicker
+import 'package:image_picker/image_picker.dart';
 
 class SignupWidget extends StatefulWidget {
   final VoidCallback onSwitchToLogin;
@@ -22,11 +22,16 @@ class _SignupWidgetState extends State<SignupWidget> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController(); // <-- NEW CONTROLLER
+
   String _selectedRole = 'Citizen';
   bool _isLoading = false;
-  File? _avatarFile; // State variable to hold the selected image file
+  File? _avatarFile;
 
-  // --- Function to show detailed error dialog ---
+  // --- NEW: State variables for password visibility ---
+  bool _isPasswordHidden = true;
+  bool _isConfirmPasswordHidden = true;
+
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -36,22 +41,15 @@ class _SignupWidgetState extends State<SignupWidget> {
         actions: <Widget>[
           TextButton(
             child: const Text('Okay'),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-            },
+            onPressed: () => Navigator.of(ctx).pop(),
           )
         ],
       ),
     );
   }
 
-  // --- Function to pick an image from the gallery ---
   Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 50, // Compress image to reduce size
-    );
-
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 50);
     if (pickedFile != null) {
       setState(() {
         _avatarFile = File(pickedFile.path);
@@ -60,6 +58,7 @@ class _SignupWidgetState extends State<SignupWidget> {
   }
 
   Future<void> _submit() async {
+    // The form validation now includes the password match check automatically
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -70,21 +69,23 @@ class _SignupWidgetState extends State<SignupWidget> {
     setState(() => _isLoading = true);
 
     try {
+      // The API call remains the same as it doesn't need the confirm password
       await Provider.of<AuthProvider>(context, listen: false).register(
         firstname: _fnameController.text,
         lastname: _lnameController.text,
         email: _emailController.text,
         phone: _phoneController.text,
-        password: _passwordController.text,
+        password: _passwordController.text, // Send the original password
         role: _selectedRole,
         avatarFile: _avatarFile!,
       );
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const VerifyEmailScreen()));
+      if(mounted) {
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const VerifyEmailScreen()));
+      }
     } catch (error) {
-      // This will now show the specific error message from the backend
       String errorMessage = error.toString();
       if (errorMessage.startsWith("Exception: ")) {
-        errorMessage = errorMessage.substring(11); // Clean up the error message
+        errorMessage = errorMessage.substring(11);
       }
       _showErrorDialog(errorMessage);
     } finally {
@@ -95,19 +96,28 @@ class _SignupWidgetState extends State<SignupWidget> {
   }
 
   @override
+  void dispose() {
+    _fnameController.dispose();
+    _lnameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose(); // <-- Dispose the new controller
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Form(
       key: _formKey,
       child: Column(
         children: [
-          // --- NEW: Avatar Picker UI ---
+          // Avatar Picker UI
           Stack(
             children: [
               CircleAvatar(
                 radius: 60,
-                backgroundImage: _avatarFile != null
-                    ? FileImage(_avatarFile!)
-                    : const AssetImage('assets/images/default_avatar.png') as ImageProvider,
+                backgroundImage: _avatarFile != null ? FileImage(_avatarFile!) : const AssetImage('assets/images/default_avatar.png') as ImageProvider,
                 backgroundColor: kLightColor,
               ),
               Positioned(
@@ -115,17 +125,14 @@ class _SignupWidgetState extends State<SignupWidget> {
                 right: 0,
                 child: InkWell(
                   onTap: _pickImage,
-                  child: const CircleAvatar(
-                    radius: 20,
-                    backgroundColor: kPrimaryColor,
-                    child: Icon(Icons.edit, color: Colors.white, size: 20),
-                  ),
+                  child: const CircleAvatar(radius: 20, backgroundColor: kPrimaryColor, child: Icon(Icons.edit, color: Colors.white, size: 20)),
                 ),
               ),
             ],
           ),
           const SizedBox(height: kDefaultPadding),
 
+          // --- Standard Text Fields ---
           TextFormField(controller: _fnameController, decoration: kDefaultInputDecoration(hintText: 'First Name'), validator: (v) => v!.isEmpty ? 'Required' : null),
           const SizedBox(height: kDefaultPadding),
           TextFormField(controller: _lnameController, decoration: kDefaultInputDecoration(hintText: 'Last Name'), validator: (v) => v!.isEmpty ? 'Required' : null),
@@ -134,15 +141,47 @@ class _SignupWidgetState extends State<SignupWidget> {
           const SizedBox(height: kDefaultPadding),
           TextFormField(controller: _phoneController, decoration: kDefaultInputDecoration(hintText: 'Phone Number'), keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly], validator: (v) => v!.length != 10 ? 'Must be 10 digits' : null),
           const SizedBox(height: kDefaultPadding),
-          TextFormField(controller: _passwordController, decoration: kDefaultInputDecoration(hintText: 'Password'), obscureText: true, validator: (v) => v!.length < 6 ? 'Min 6 characters' : null),
+
+          // --- MODIFIED: Password Field with Hide/Show Icon ---
+          TextFormField(
+              controller: _passwordController,
+              obscureText: _isPasswordHidden,
+              decoration: kDefaultInputDecoration(hintText: 'Password').copyWith(
+                suffixIcon: IconButton(
+                  icon: Icon(_isPasswordHidden ? Icons.visibility_off : Icons.visibility, color: kPrimaryColor),
+                  onPressed: () => setState(() => _isPasswordHidden = !_isPasswordHidden),
+                ),
+              ),
+              validator: (v) => v!.length < 6 ? 'Min 6 characters' : null
+          ),
           const SizedBox(height: kDefaultPadding),
-          // --- MODIFIED: Added 'Analyst' role ---
+
+          // --- NEW: Confirm Password Field with Hide/Show Icon and Validation ---
+          TextFormField(
+              controller: _confirmPasswordController,
+              obscureText: _isConfirmPasswordHidden,
+              decoration: kDefaultInputDecoration(hintText: 'Confirm Password').copyWith(
+                suffixIcon: IconButton(
+                  icon: Icon(_isConfirmPasswordHidden ? Icons.visibility_off : Icons.visibility, color: kPrimaryColor),
+                  onPressed: () => setState(() => _isConfirmPasswordHidden = !_isConfirmPasswordHidden),
+                ),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please confirm your password';
+                }
+                if (value != _passwordController.text) {
+                  return 'Passwords do not match';
+                }
+                return null;
+              }
+          ),
+          const SizedBox(height: kDefaultPadding),
+
           DropdownButtonFormField<String>(
             value: _selectedRole,
             decoration: kDefaultInputDecoration(hintText: 'Register as'),
-            items: ['Citizen', 'Analyst'].map((String value) {
-              return DropdownMenuItem<String>(value: value, child: Text(value));
-            }).toList(),
+            items: ['Citizen', 'Analyst'].map((String value) => DropdownMenuItem<String>(value: value, child: Text(value))).toList(),
             onChanged: (newValue) => setState(() => _selectedRole = newValue!),
           ),
           const SizedBox(height: kDefaultPadding),

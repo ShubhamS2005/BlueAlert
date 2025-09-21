@@ -6,6 +6,7 @@ class User {
   final String phone;
   final String role;
   final String avatarUrl;
+  final int credibilityScore;
 
   User({
     required this.id,
@@ -15,6 +16,7 @@ class User {
     required this.phone,
     required this.role,
     required this.avatarUrl,
+    required this.credibilityScore,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class User {
       phone: json['phone'],
       role: json['role'],
       avatarUrl: json['userAvatar']['url'],
+      credibilityScore: json['credibilityScore'] ?? 0,
     );
   }
 
@@ -38,6 +41,7 @@ class User {
       'phone': phone,
       'role': role,
       'userAvatar': {'url': avatarUrl},
+      'credibilityScore': credibilityScore,
     };
   }
 }

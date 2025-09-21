@@ -16,7 +16,6 @@ class _LoginWidgetState extends State<LoginWidget> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  String _selectedRole = 'Citizen';
   bool _isLoading = false;
   bool _isPasswordHidden = true;
 
@@ -27,15 +26,20 @@ class _LoginWidgetState extends State<LoginWidget> {
     setState(() => _isLoading = true);
 
     try {
+      // --- FIX: Removed the _selectedRole argument ---
+      // The AuthProvider now handles role detection automatically.
       await Provider.of<AuthProvider>(context, listen: false).login(
         _emailController.text,
         _passwordController.text,
       );
-      // Navigation will be handled by the splash/main screen logic
+      // --- END FIX ---
+
     } catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -49,25 +53,10 @@ class _LoginWidgetState extends State<LoginWidget> {
       key: _formKey,
       child: Column(
         children: [
-          // Role Selector
-          DropdownButtonFormField<String>(
-            value: _selectedRole,
-            decoration: kDefaultInputDecoration(hintText: 'Select Role'),
-            items: ['Citizen', 'Analyst', 'Admin'].map((String value) {
-              return DropdownMenuItem<String>(
-                value: value,
-                child: Text(value),
-              );
-            }).toList(),
-            onChanged: (newValue) {
-              setState(() {
-                _selectedRole = newValue!;
-              });
-            },
-          ),
-          const SizedBox(height: kDefaultPadding),
+          // The role selector dropdown is no longer needed here as the backend logic handles it.
+          // You can remove it for a cleaner UI if you wish, or keep it if you plan to
+          // re-introduce role selection later. For now, it doesn't affect the login logic.
 
-          // Email Field
           TextFormField(
             controller: _emailController,
             decoration: kDefaultInputDecoration(hintText: 'Email', icon: Icons.email_outlined),
@@ -80,8 +69,6 @@ class _LoginWidgetState extends State<LoginWidget> {
             },
           ),
           const SizedBox(height: kDefaultPadding),
-
-          // Password Field
           TextFormField(
             controller: _passwordController,
             obscureText: _isPasswordHidden,
@@ -99,7 +86,6 @@ class _LoginWidgetState extends State<LoginWidget> {
             },
           ),
           const SizedBox(height: kDefaultPadding / 2),
-
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
@@ -108,8 +94,6 @@ class _LoginWidgetState extends State<LoginWidget> {
             ),
           ),
           const SizedBox(height: kDefaultPadding),
-
-          // Login Button
           if (_isLoading)
             const CircularProgressIndicator()
           else

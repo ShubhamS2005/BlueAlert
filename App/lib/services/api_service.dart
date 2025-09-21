@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:geolocator/geolocator.dart';
 
 class ApiService {
   // IMPORTANT: Replace with your computer's local network IP address.
@@ -12,7 +13,6 @@ class ApiService {
   static const String baseUrl = "http://$_ipAddress:$_port/api/v1";
 
   /// Handles user login by sending credentials to the backend.
-  ///
   /// The backend expects `password` and `confirmPassword` to be the same.
   Future<Map<String, dynamic>> login(String email, String password, String role) async {
     final response = await http.post(
@@ -35,7 +35,6 @@ class ApiService {
   }
 
   /// Handles new user registration.
-  ///
   /// Sends user data and an avatar image as a multipart/form-data request.
   Future<Map<String, dynamic>> register({
     required String firstname,
@@ -61,7 +60,7 @@ class ApiService {
       await http.MultipartFile.fromPath(
         'userAvatar', // This key must match the backend `req.files.userAvatar`
         avatarFile.path,
-        contentType: MediaType('image', 'jpeg'), // Or 'png', etc.
+        contentType: MediaType('image', 'jpeg'),
       ),
     );
 
@@ -77,14 +76,8 @@ class ApiService {
   }
 
   /// Fetches the current user's profile to validate an existing session token.
-  ///
-  /// The JWT token is passed in a `Cookie` header, which the backend's
-  /// authentication middleware is configured to read.
   Future<Map<String, dynamic>> getUserProfile(String token, String role) async {
-    String endpoint = "";
-    if (role == "Admin") endpoint = "/admin/me";
-    if (role == "Citizen") endpoint = "/citizen/me";
-    if (role == "Analyst") endpoint = "/analyst/me";
+    String endpoint = "/${role.toLowerCase()}/me";
 
     final response = await http.get(
       Uri.parse('$baseUrl/user$endpoint'),
@@ -102,47 +95,97 @@ class ApiService {
   }
 
   /// Submits a new hazard report from a citizen.
-  ///
-  /// This is a multipart request because it can optionally include a media file.
-  /// The JWT token is passed via a Cookie header for authentication.
   Future<Map<String, dynamic>> submitReport({
     required String text,
     required double lat,
     required double lon,
     required String token,
+    required String userId, // <-- CHANGE 1: Added userId parameter
     File? mediaFile,
   }) async {
     var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/report/citizen/report'));
-
-    // The backend's `isCitizenAuthenticated` middleware reads the token from a cookie
     request.headers['Cookie'] = 'citizenToken=$token';
 
-    // Add text fields required by the backend's `createReport` controller
-    request.fields['text'] = text;
-    request.fields['lat'] = lat.toString();
-    request.fields['lon'] = lon.toString();
-    request.fields['source'] = 'citizen'; // As defined in the report schema
+    // Add all required fields to the request body
+    request.fields.addAll({
+      'text': text,
+      'lat': lat.toString(),
+      'lon': lon.toString(),
+      'source': 'citizen',
+      'submittedBy': userId, // <-- CHANGE 2: Send the user's ID
+    });
 
-    // Add the media file if it was provided
     if (mediaFile != null) {
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'media', // This key must match `req.files.media` in the backend controller
-          mediaFile.path,
-          contentType: MediaType('image', 'jpeg'),
-        ),
-      );
+      request.files.add(await http.MultipartFile.fromPath('media', mediaFile.path, contentType: MediaType('image', 'jpeg')));
     }
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 
-    // A successful creation typically returns a 201 status code
     if (response.statusCode == 201) {
       return jsonDecode(response.body);
     } else {
       final error = jsonDecode(response.body);
       throw Exception(error['message'] ?? 'Failed to submit report.');
+    }
+  }
+
+  Future<List<dynamic>> listReports({
+    required String token,
+    required String role,
+    String? status, // Only used for Analyst
+  }) async {
+    String endpoint;
+    String cookieName = '${role.toLowerCase()}Token';
+
+    if (role == 'Citizen') {
+      // For Citizens, get their location and find nearby reports.
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      endpoint = '/report/citizen/nearby?lat=${position.latitude}&lon=${position.longitude}&radius=20'; // 20km radius
+    } else {
+      // For Analysts, list all reports, with an optional status filter.
+      endpoint = '/report/analyst/reports';
+      if (status != null && status != 'All') {
+        endpoint += '?status=$status';
+      }
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': '$cookieName=$token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      // The backend nests the list under a 'reports' key.
+      return jsonDecode(response.body)['reports'];
+    } else {
+      final error = jsonDecode(response.body);
+      throw Exception(error['message'] ?? 'Failed to load reports.');
+    }
+  }
+
+  /// Allows an analyst to verify a report.
+  Future<Map<String, dynamic>> verifyReport({
+    required String reportId,
+    required String token,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/report/analyst/verify/$reportId'),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Cookie': 'analystToken=$token',
+      },
+      body: jsonEncode(<String, String>{'status': 'Verified'}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      final error = jsonDecode(response.body);
+      throw Exception(error['message'] ?? 'Failed to verify report.');
     }
   }
 }
