@@ -1,0 +1,200 @@
+/* Default = Dark theme */
+:root {
+  --bg: #0f1724;
+  --card: #17243f;
+  --accent: #00c2ff;
+  --muted: #9aa9b2;
+  --text: #e6f3fb;
+}
+
+/* Light theme variables */
+body.light {
+  --bg: #f4f7fa;
+  --card: #ffffff;
+  --accent: #0077cc;
+  --muted: #555;
+  --text: #111;
+}
+
+html,
+body,
+#map {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+/* Apply theming */
+body {
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Sidebar and panels */
+.sidebar,
+.panel {
+  background: var(--card);
+  color: var(--text);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Button styling */
+button {
+  background: var(--accent);
+  color: #fff;
+}
+button:hover {
+  background: #005fa3;
+}
+body {
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial;
+  background: linear-gradient(180deg, #071026 0%, #071a2b 100%);
+  color: #e6f3fb;
+  height: 100vh;
+  display: flex;
+  gap: 16px;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 360px;
+  max-width: 40%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0.01)
+  );
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px;
+  overflow: auto;
+}
+
+/* Map container */
+.map-wrap {
+  flex: 1;
+  position: relative;
+  margin: 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.6);
+}
+
+/* Panels */
+.panel {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--muted);
+}
+
+/* Headings */
+h1 {
+  margin: 0;
+  font-size: 20px;
+  color: #dff7ff;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.info {
+  font-size: 13px;
+  color: #cdefff;
+}
+
+.update-time {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Buttons */
+button {
+  background: var(--accent);
+  border: none;
+  color: #012;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.3s ease;
+}
+
+button:hover {
+  background: #00aadd;
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  gap: 8px;
+  flex-direction: column;
+}
+
+.legend .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  width: 22px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Links */
+a.small {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+a.small:hover {
+  text-decoration: underline;
+}
+
+/* Map Controls */
+.map-top-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+}
+
+.alert-badge {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #ffb3b3, #ff6b6b);
+  color: #2b0000;
+  font-weight: 700;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+  .sidebar {
+    width: 100%;
+    max-height: 40%;
+    position: relative;
+    margin: 8px;
+  }
+
+  body {
+    flex-direction: column;
+  }
+}

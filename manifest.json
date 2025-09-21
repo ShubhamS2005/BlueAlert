@@ -1,0 +1,20 @@
+{
+  "name": "Blue Alert - Live Hazard Map",
+  "short_name": "BlueAlert",
+  "start_url": "true",
+  "display": "standalone",
+  "background_color": "#071026",
+  "theme_color": "#00c2ff",
+  "icons": [
+    {
+      "src": "Leaflet-pwa-map/assets/icons/images/image.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "Leaflet-pwa-map/assets/icons/images/image.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

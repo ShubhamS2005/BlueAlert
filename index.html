@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Blue Alert — saving lives</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <!-- Leaflet Draw CSS (for drawing zones) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="/manifest.json">
+  <!-- Simple clean CSS (feel free to replace with Tailwind if you prefer) -->
+  <style>
+    :root{
+      --bg:#0f1724; --card:#17243f; --accent:#00c2ff; --muted:#9aa9b2;
+    }
+    html,body,#map { height:100%; margin:0; padding:0; }
+    body {
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg,#071026 0%, #071a2b 100%);
+      color: #e6f3fb;
+      height:100vh;
+      display:flex;
+      gap:16px;
+    }
+    .sidebar {
+      width:360px;
+      max-width:40%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:12px;
+      padding:16px;
+      box-shadow: 0 6px 30px rgba(0,0,0,0.6);
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      margin:16px;
+      overflow:auto;
+    }
+    .map-wrap { flex:1; position:relative; margin:16px; border-radius:12px; overflow:hidden; box-shadow: 0 6px 30px rgba(0,0,0,0.6); }
+    .panel {
+      background: rgba(255,255,255,0.02);
+      border-radius:10px;
+      padding:12px;
+      color:var(--muted);
+    }
+    h1 { margin:0; font-size:20px; color:#dff7ff; display:flex; gap:8px; align-items:center; }
+    .muted { color:var(--muted); font-size:13px; margin-top:6px; }
+    button { background:var(--accent); border:none; color:#012; padding:8px 10px; border-radius:8px; cursor:pointer; font-weight:600; }
+    .legend { display:flex; gap:8px; flex-direction:column; }
+    .legend .row { display:flex; align-items:center; gap:8px; }
+    .swatch { width:22px; height:14px; border-radius:3px; border:1px solid rgba(255,255,255,0.08);}
+    .info { font-size:13px; color:#cdefff; }
+    .update-time { font-size:12px; color:var(--muted); }
+    .map-top-controls { position:absolute; top:12px; left:12px; z-index:1000; display:flex; gap:8px; }
+    .alert-badge { padding:6px 8px; border-radius:8px; background:linear-gradient(90deg,#ffb3b3,#ff6b6b); color:#2b0000; font-weight:700; }
+    a.small { color:var(--accent); font-weight:600; font-size:13px }
+    /* mobile */
+    @media (max-width:900px){
+      .sidebar{ width:100%; max-height:40%; position:relative; margin:8px; }
+      body { flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h1>🔵 Blue Alert -- saving lives </h1>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="muted">Status</div>
+          <div class="info" id="statusText">Initializing…</div>
+        </div>
+        <div style="text-align:right">
+          <div class="muted">Last update</div>
+          <div class="update-time" id="lastUpdate">—</div>
+        </div>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button id="btnRefresh">Refresh now</button>
+        <button id="btnLocate">Locate me</button>
+        <button id="btnUploadGeo">Upload Zones</button>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <label style="font-size:13px; color:var(--muted)">Auto refresh:</label>
+        <select id="refreshInterval">
+          <option value="0">Off</option>
+          <option value="1">1 min</option>
+          <option value="5" selected>5 min</option>
+          <option value="15">15 min</option>
+          <option value="60">60 min</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex;gap:8px; align-items:center; justify-content:space-between">
+        <div>
+          <div class="muted">Legend</div>
+          <div style="font-weight:700; color:#eafcff">Zones & Overlays</div>
+        </div>
+        <div>
+          <button id="toggleDraw">Toggle Draw</button>
+        </div>
+      </div>
+      <div class="legend" style="margin-top:8px">
+        <div class="row"><div class="swatch" style="background:#7ee787"></div> <div>Safe zone</div></div>
+        <div class="row"><div class="swatch" style="background:#ffd86b"></div> <div>Caution</div></div>
+        <div class="row"><div class="swatch" style="background:#ff9b6b"></div> <div>Danger</div></div>
+        <div class="row"><div class="swatch" style="background:#ff6b6b"></div> <div>Red Alert</div></div>
+        <div class="row"><div class="swatch" style="background:linear-gradient(90deg,#ff6b6b,#ffb3b3);"></div> <div>Active Weather Alerts</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="muted">Live Feeds / Data</div>
+      <div style="margin-top:8px; display:flex;flex-direction:column; gap:8px;">
+        <div><strong>Weather:</strong> OpenWeatherMap (current, alerts)</div>
+        <div><strong>Cyclone / Storm:</strong> Add provider endpoint in code (GDACS / national services)</div>
+        <div style="font-size:13px; color:var(--muted)"><strong>Note:</strong> You must supply your OpenWeatherMap API key below or in the JS. Alerts will be fetched for map center / visible area.</div>
+        <div style="margin-top:8px;">
+          <label style="font-size:13px; color:var(--muted)">OpenWeatherMap API key</label><br>
+          <input id="owmKey" placeholder="curl "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b&format=json&limit=5"
+style="width:100%; padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:#eafcff"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="muted">Quick actions</div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button id="exportGeo">Export Zones</button>
+        <button id="clearZones">Clear Zones</button>
+      </div>
+    </div>
+
+    <div class="panel" id="eventsPanel">
+      <div class="muted">Active Events</div>
+      <div id="eventsList" style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+        <div style="color:var(--muted)">No events loaded yet.</div>
+      </div>
+    </div>
+
+    <div style="font-size:12px; color:var(--muted); margin-top:6px">Made for PWA integration • Auto-update via polling • Styled for clarity</div>
+  </div>
+
+  <div class="map-wrap">
+    <div id="map" style="width:100%;height:100%"></div>
+
+    <div class="map-top-controls" id="mapControls">
+      <div class="panel" style="padding:6px 8px;">
+        <div style="font-weight:700; font-size:14px">Map Controls</div>
+        <div style="font-size:12px; color:var(--muted)"><a class="small" id="fitZones">Fit to zones</a> • <a class="small" id="toggleLayer">Toggle weather</a></div>
+        <button id="theme-toggle">dark</button> 
+    </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input for uploading GeoJSON -->
+  <input type="file" id="geoFile" accept=".geojson,.json" style="display:none" />
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet Draw -->
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <!-- Turf (for geo ops) -->
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <script>
+  /* -------------------------
+     Configuration (edit these)
+     ------------------------- */
+  const OWM_API_KEY_PLACEHOLDER = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b&format=json&limit=5"; // or leave empty and use input box
+  const DEFAULT_CENTER = [20.5937,78.9629]; // India center (change as needed)
+  const DEFAULT_ZOOM = 7;
+  // styling for zones
+  const ZONE_STYLES = {
+    safe: { color: "#1b771b", fillColor:"#7ee787", fillOpacity:0.25, weight:2 },
+    caution: { color: "#aa7a1e", fillColor:"#ffd86b", fillOpacity:0.25, weight:2 },
+    danger: { color: "#b24d2a", fillColor:"#ff9b6b", fillOpacity:0.25, weight:2 },
+    red: { color: "#a61b1b", fillColor:"#ff6b6b", fillOpacity:0.3, weight:2 }
+  };
+
+  /* -------------------------
+     App state
+     ------------------------- */
+  let map, drawnItems, drawControl, zonesLayer;
+  let weatherLayerGroup = L.layerGroup();
+  let eventsLayerGroup = L.layerGroup();
+  let autoRefreshTimer = null;
+  let lastUpdateTs = null;
+
+  /* -------------------------
+     Initialize map
+     ------------------------- */
+  function initMap(){
+    map = L.map('map', { zoomControl:true }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+    // base layers
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+    const watercolor = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg', { maxZoom: 16, attribution: 'Map tiles by Stamen' });
+
+    L.control.layers({ "OSM": osm, "Watercolor": watercolor }, { "Weather": weatherLayerGroup, "Events": eventsLayerGroup }).addTo(map);
+
+    // drawn items layer
+    drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    // drawing tools
+    drawControl = new L.Control.Draw({
+      position: 'topleft',
+      draw: {
+        polyline:false, rectangle: true, polygon: true, circle: false, marker: false, circlemarker:false
+      },
+      edit: {
+        featureGroup: drawnItems,
+        remove:true
+      }
+    });
+    // NOTE: not adding control by default — toggled by button
+    map.on(L.Draw.Event.CREATED, function (event) {
+      const layer = event.layer;
+      // add property to layer for zone type default
+      layer.properties = layer.properties || {};
+      layer.properties.zone = "danger"; // default zone when drawn (user can edit later)
+      applyZoneStyle(layer);
+      drawnItems.addLayer(layer);
+    });
+
+    // zones GeoJSON layer (if imported)
+    zonesLayer = L.geoJSON(null, {
+      style: styleFromFeature,
+      onEachFeature: (feature, layer) => {
+        layer.on('click', () => {
+          // simple popup with option to change type
+          showZoneEditor(layer, feature);
+        });
+      }
+    }).addTo(map);
+
+    // add weather/events groups
+    weatherLayerGroup.addTo(map);
+    eventsLayerGroup.addTo(map);
+  }
+
+  function styleFromFeature(feature){
+    const z = (feature.properties && feature.properties.zone) || "danger";
+    return ZONE_STYLES[z] || ZONE_STYLES.danger;
+  }
+
+  function applyZoneStyle(layer){
+    // used when user draws polygon
+    const z = (layer.properties && layer.properties.zone) || "danger";
+    const styles = ZONE_STYLES[z] || ZONE_STYLES.danger;
+    if (layer.setStyle) layer.setStyle(styles);
+    if (layer.bindPopup) layer.bindPopup(`<b>Zone:</b> ${z}<br><button onclick="changeZoneType('${layer._leaflet_id}', 'safe')">Set Safe</button> <button onclick="changeZoneType('${layer._leaflet_id}','danger')">Set Danger</button>`);
+  }
+
+  // helper to find drawn layer by leaflet id
+  function getDrawnLayerById(id){
+    let found = null;
+    drawnItems.eachLayer(l => { if (String(l._leaflet_id) === String(id)) found = l; });
+    return found;
+  }
+
+  // expose function for popup button actions
+  window.changeZoneType = function(id, type){
+    const layer = getDrawnLayerById(id);
+    if (!layer) return alert("Layer not found");
+    layer.properties = layer.properties || {};
+    layer.properties.zone = type;
+    applyZoneStyle(layer);
+    layer.closePopup && layer.closePopup();
+  }
+
+  function showZoneEditor(layer, feature){
+    // open a small control or popup to change zone type and export
+    const html = `
+      <div style="font-size:13px">
+        <b>Zone</b><br>
+        <select id="zoneSel">
+          <option value="safe">Safe</option>
+          <option value="caution">Caution</option>
+          <option value="danger">Danger</option>
+          <option value="red">Red Alert</option>
+        </select>
+        <div style="margin-top:8px"><button id="saveZone">Save</button> <button id="deleteZone">Delete</button></div>
+      </div>`;
+    layer.bindPopup(html).openPopup();
+    setTimeout(()=> {
+      const sel = document.getElementById('zoneSel');
+      sel.value = layer.properties.zone || 'danger';
+      document.getElementById('saveZone').onclick = () => {
+        layer.properties.zone = sel.value;
+        applyZoneStyle(layer);
+        layer.closePopup();
+      };
+      document.getElementById('deleteZone').onclick = () => {
+        drawnItems.removeLayer(layer);
+        layer.closePopup();
+      };
+    }, 200);
+  }
+
+  /* -------------------------
+     Data fetching / feeds
+     ------------------------- */
+
+  // fetch weather & alerts for current map bounds / center
+  async function fetchWeatherAndAlerts(apiKey){
+    try{
+      updateStatus("Fetching weather & alerts...");
+      const center = map.getCenter();
+      const lat = center.lat;
+      const lon = center.lng;
+      // OpenWeatherMap OneCall/One Call 3.0: example uses One Call 1.0 endpoint (works with many keys).
+      // We request current weather + alerts.
+      const url = `https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,daily&appid=${apiKey}&units=metric`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error("OWM fetch error: " + r.status);
+      const payload = await r.json();
+
+      // clear old weather markers
+      weatherLayerGroup.clearLayers();
+
+      // show current weather at center
+      if (payload.current){
+        const cur = payload.current;
+        const marker = L.marker([lat,lon], { title: "Current weather at center" })
+          .bindPopup(`<b>Weather:</b> ${cur.weather && cur.weather[0] ? cur.weather[0].description : '—'}<br><b>Temp:</b> ${cur.temp}°C`);
+        weatherLayerGroup.addLayer(marker);
+      }
+
+      // process alerts array (if present)
+      if (payload.alerts && payload.alerts.length){
+        payload.alerts.forEach((a,i) => {
+          // create a nice panel in events list
+          addEventToPanel({ id: 'owm-'+i, title: a.event, description: a.description, start:a.start, end:a.end, source:'OpenWeatherMap' });
+
+          // create a red circular marker to indicate area (we don't get exact polygon, show center with popup)
+          const marker = L.circleMarker([lat + (0.02 * (i+1)), lon], {
+            radius: 10,
+            fillColor: '#ff6b6b',
+            color: '#a61b1b',
+            fillOpacity: 0.9
+          }).bindPopup(`<b>${a.event}</b><br>${a.sender_name}<br><b>From:</b> ${new Date(a.start*1000).toLocaleString()}<br><b>To:</b> ${new Date(a.end*1000).toLocaleString()}<br><div style="max-height:120px; overflow:auto">${a.description}</div>`);
+          weatherLayerGroup.addLayer(marker);
+        });
+      }
+
+      // update last update time
+      lastUpdateTs = new Date();
+      document.getElementById('lastUpdate').textContent = lastUpdateTs.toLocaleString();
+      updateStatus("Weather & alerts fetched.");
+    } catch (err) {
+      console.error(err);
+      updateStatus("Error fetching weather: " + err.message);
+    }
+  }
+
+  // Example placeholder: fetch cyclone/storm feed (replace endpoint with real provider)
+  async function fetchCycloneFeed(){
+    updateStatus("Fetching cyclone/storm feed...");
+    // This is a placeholder: integrate GDACS/IMD/NHC feed here
+    // Example: fetch('https://www.gdacs.org/gdacsapi/api/events/geteventlist/summary')...
+    // For demo, we clear and create a dummy event
+    eventsLayerGroup.clearLayers();
+    // Dummy sample: show an icon and add to panel
+    const sampleMarker = L.marker([DEFAULT_CENTER[0]+2, DEFAULT_CENTER[1]+2]).bindPopup("<b>Sample Cyclone (demo)</b><br>This is a placeholder; replace with a real feed.");
+    eventsLayerGroup.addLayer(sampleMarker);
+    addEventToPanel({ id:'demo-cyclone', title:'Sample Cyclone', description:'Demo cyclone overlay - replace with real feed', start: Date.now()/1000, source:'Demo' });
+    updateStatus("Cyclone feed (demo) loaded.");
+  }
+
+  /* -------------------------
+     UI helpers
+     ------------------------- */
+  function updateStatus(txt){
+    document.getElementById('statusText').textContent = txt;
+  }
+  function addEventToPanel(evt){
+    const list = document.getElementById('eventsList');
+    // avoid duplicates
+    if (document.getElementById('evt-'+evt.id)) return;
+    const el = document.createElement('div');
+    el.id = 'evt-'+evt.id;
+    el.style.padding = '8px';
+    el.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00))';
+    el.style.borderRadius = '8px';
+    el.innerHTML = `<div style="font-weight:700;color:#eafcff">${evt.title} <span style="float:right;font-size:12px;color:var(--muted)">${evt.source}</span></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:6px">${evt.description ? (evt.description.slice(0,160) + (evt.description.length>160?'...':'')) : ''}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px"><b>Start:</b> ${evt.start ? new Date(evt.start*1000).toLocaleString() : '-'}</div>`;
+    list.prepend(el);
+  }
+
+  /* -------------------------
+     Import/Export Zones
+     ------------------------- */
+  function exportZones(){
+    // export both drawnItems and zonesLayer (GeoJSON)
+    const out = { type:'FeatureCollection', features:[] };
+    drawnItems.eachLayer(l => {
+      try {
+        const geo = l.toGeoJSON();
+        geo.properties = Object.assign({}, l.properties || {});
+        out.features.push(geo);
+      } catch(e){}
+    });
+    zonesLayer.eachLayer(l => {
+      try {
+        const geo = l.toGeoJSON();
+        geo.properties = Object.assign({}, l.feature && l.feature.properties || {});
+        out.features.push(geo);
+      } catch(e) {}
+    });
+
+    const blob = new Blob([JSON.stringify(out, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'zones.geojson';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importZonesFromFile(file){
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const gj = JSON.parse(e.target.result);
+        zonesLayer.clearLayers();
+        drawnItems.clearLayers();
+        L.geoJSON(gj, {
+          style: styleFromFeature,
+          onEachFeature: (f,l) => {
+            // store props on layer for editor usage
+            l.properties = (f.properties || {});
+            applyZoneStyle(l);
+            drawnItems.addLayer(l); // add to drawn items so they are editable
+          }
+        });
+        updateStatus("Zones imported from file.");
+      } catch(err){
+        alert("Invalid GeoJSON: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /* -------------------------
+     Controls & bindings
+     ------------------------- */
+  function attachUI(){
+    document.getElementById('btnRefresh').onclick = () => {
+      triggerAllFetches();
+    };
+    document.getElementById('btnLocate').onclick = () => {
+      map.locate({setView:true, maxZoom:12});
+    };
+    document.getElementById('toggleDraw').onclick = () => {
+      if (map.hasLayer(drawControl)) {
+        map.removeControl(drawControl);
+      } else {
+        drawControl.addTo(map);
+      }
+    };
+    document.getElementById('btnUploadGeo').onclick = () => document.getElementById('geoFile').click();
+    document.getElementById('geoFile').onchange = (ev) => {
+      const f = ev.target.files[0];
+      if (f) importZonesFromFile(f);
+    };
+    document.getElementById('exportGeo').onclick = exportZones;
+    document.getElementById('clearZones').onclick = () => {
+      if (!confirm("Clear all drawn/imported zones?")) return;
+      drawnItems.clearLayers();
+      zonesLayer.clearLayers();
+    };
+
+    document.getElementById('refreshInterval').onchange = function(){
+      const val = Number(this.value);
+      if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+      if (val > 0){
+        autoRefreshTimer = setInterval(() => {
+          triggerAllFetches();
+        }, val * 60 * 1000);
+      }
+    };
+
+    // fit zones
+    document.getElementById('fitZones').onclick = () => {
+      const group = new L.FeatureGroup();
+      drawnItems.eachLayer(l => group.addLayer(l));
+      zonesLayer.eachLayer(l => group.addLayer(l));
+      if (group.getLayers().length) map.fitBounds(group.getBounds(), { padding:[40,40] });
+      else alert("No zones to fit.");
+    };
+
+    // toggle weather layer
+    document.getElementById('toggleLayer').onclick = () => {
+      if (map.hasLayer(weatherLayerGroup)) map.removeLayer(weatherLayerGroup);
+      else map.addLayer(weatherLayerGroup);
+    };
+
+    // save OWM key to input
+    const input = document.getElementById('owmKey');
+    if (OWM_API_KEY_PLACEHOLDER) { input.value = OWM_API_KEY_PLACEHOLDER; }
+
+    // map locate event
+    map.on('locationfound', (e) => {
+      L.circle(e.latlng, { radius: e.accuracy/2 }).addTo(map);
+    });
+
+    // initial pic
+    updateStatus("Ready. Click Refresh or set auto-refresh.");
+  }
+
+  /* -------------------------
+     Trigger all fetches
+     ------------------------- */
+  async function triggerAllFetches(){
+    const owmKey = document.getElementById('owmKey').value || OWM_API_KEY_PLACEHOLDER;
+    if (!owmKey) {
+      updateStatus("OpenWeatherMap key missing — enter in sidebar to fetch weather.");
+    } else {
+      await fetchWeatherAndAlerts(owmKey);
+    }
+    await fetchCycloneFeed(); // placeholder - replace with real provider
+  }
+
+  /* -------------------------
+     Startup
+     ------------------------- */
+  window.addEventListener('load', async () => {
+    initMap();
+    attachUI();
+    // initial fetch
+    triggerAllFetches();
+    // attempt to register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      try {
+        navigator.serviceWorker.register('sw.js');
+        console.log("Service worker registered.");
+      } catch(e) {
+        console.warn("SW register failed:", e);
+      }
+    }
+  });
+  </script>
+</body>
+</html>
