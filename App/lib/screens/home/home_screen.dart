@@ -5,6 +5,7 @@ import 'tabs/citizen/citizen_create_report_tab.dart';
 import 'tabs/analyst/analyst_reports_feed_tab.dart';
 import 'tabs/citizen/citizen_profile_tab.dart';
 import 'tabs/shared/reports_feed_tab.dart';
+import 'tabs/shared/hotspot_tab.dart'; // <-- IMPORT the renamed HotspotTab
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,26 +29,31 @@ class _HomeScreenState extends State<HomeScreen> {
     final user = authProvider.user;
     final isCitizen = user?.role == 'Citizen';
 
-    // Define pages and navigation items based on user role
+    // Updated page lists to include HotspotTab
     final List<Widget> pages = isCitizen
         ? [
       const ReportsFeedTab(role: 'Citizen'),
       const CitizenCreateReportTab(),
+      const HotspotTab(), // <-- Use HotspotTab
       const CitizenProfileTab(),
     ]
         : [
-      const AnalystReportsFeedTab(), // Analyst's specialized feed
+      const AnalystReportsFeedTab(),
+      const HotspotTab(), // <-- Use HotspotTab
       const CitizenProfileTab(),
     ];
 
+    // Updated navigation items with the new label
     final List<BottomNavigationBarItem> navItems = isCitizen
         ? [
       const BottomNavigationBarItem(icon: Icon(Icons.view_list_outlined), label: 'View Reports'),
       const BottomNavigationBarItem(icon: Icon(Icons.add_comment_outlined), label: 'Create Report'),
+      const BottomNavigationBarItem(icon: Icon(Icons.local_fire_department_outlined), label: 'Hotspots'), // <-- New Label
       const BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
     ]
         : [
       const BottomNavigationBarItem(icon: Icon(Icons.fact_check_outlined), label: 'Verify Reports'),
+      const BottomNavigationBarItem(icon: Icon(Icons.local_fire_department_outlined), label: 'Hotspots'), // <-- New Label
       const BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
     ];
 
@@ -62,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
             )
         ],
       ),
-      body: IndexedStack( // Use IndexedStack to preserve state of each tab
+      body: IndexedStack(
         index: _selectedIndex,
         children: pages,
       ),

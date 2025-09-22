@@ -3,6 +3,7 @@ import 'package:bluealert/screens/home/report_detail_screen.dart';
 import 'package:bluealert/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ReportsFeedTab extends StatefulWidget {
   final String role;
@@ -13,8 +14,11 @@ class ReportsFeedTab extends StatefulWidget {
 }
 
 class _ReportsFeedTabState extends State<ReportsFeedTab> {
-  late Future<List<dynamic>> _reportsFuture;
-  String _filterStatus = 'All'; // Default filter for Analysts
+  String _filterStatus = 'All';
+  List<dynamic> _allReports = [];
+  List<dynamic> _filteredReports = [];
+  bool _isLoading = true;
+  String _error = '';
 
   @override
   void initState() {
@@ -22,98 +26,129 @@ class _ReportsFeedTabState extends State<ReportsFeedTab> {
     _fetchReports();
   }
 
-  // This method now serves both initial fetch and refresh
-  Future<void> _fetchReports() {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    // Using setState here is key for the FutureBuilder to re-run on refresh
+  Future<void> _fetchReports() async {
     setState(() {
-      _reportsFuture = ApiService().listReports(
+      _isLoading = true;
+      _error = '';
+    });
+    try {
+      if (widget.role == 'Citizen') {
+        final locationStatus = await Permission.location.request();
+        if (!locationStatus.isGranted) {
+          throw Exception("Location permission is required to find nearby reports.");
+        }
+      }
+
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final reports = await ApiService().listReports(
         token: authProvider.token!,
         role: authProvider.user!.role,
-        status: widget.role == 'Analyst' ? _filterStatus : null, // Status filter only for Analyst
       );
-    });
-    return _reportsFuture; // Return the future for the RefreshIndicator
+      _allReports = reports;
+      _applyFilter();
+    } catch (e) {
+      if(mounted) {
+        setState(() {
+          _error = e.toString().replaceFirst("Exception: ", "");
+        });
+      }
+    } finally {
+      if(mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _applyFilter() {
+    if (_filterStatus == 'All') {
+      _filteredReports = List.from(_allReports);
+    } else if (_filterStatus == 'Verified') {
+      _filteredReports = _allReports.where((report) => report['status'] == 'Verified').toList();
+    } else if (_filterStatus == 'Pending') {
+      _filteredReports = _allReports.where((report) {
+        return report['status'] == 'Pending' || report['status'] == 'Needs Verification';
+      }).toList();
+    }
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // The filter is only shown for Analysts
-        if (widget.role == 'Analyst')
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: SegmentedButton<String>(
-              segments: const <ButtonSegment<String>>[
-                ButtonSegment<String>(value: 'All', label: Text('All')),
-                ButtonSegment<String>(value: 'Verified', label: Text('Verified')),
-                ButtonSegment<String>(value: 'Pending', label: Text('Pending')),
-              ],
-              selected: <String>{_filterStatus},
-              onSelectionChanged: (Set<String> newSelection) {
-                setState(() {
-                  _filterStatus = newSelection.first;
-                  _fetchReports(); // Re-fetch reports when filter changes
-                });
+    Widget content;
+
+    if (_isLoading) {
+      content = const Center(child: CircularProgressIndicator());
+    } else if (_error.isNotEmpty) {
+      content = Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text('Error: $_error\n\nPull down to try again.', textAlign: TextAlign.center),
+        ),
+      );
+    } else if (_filteredReports.isEmpty) {
+      content = Center(
+        child: Text(
+          'No reports available for this filter.',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+        ),
+      );
+    } else {
+      content = ListView.builder(
+        itemCount: _filteredReports.length,
+        itemBuilder: (context, index) {
+          final report = _filteredReports[index];
+          final status = report['status'] ?? 'Unknown';
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ListTile(
+              leading: Icon(
+                status == 'Verified' ? Icons.verified_user_outlined :
+                status == 'Needs Verification' ? Icons.error_outline : Icons.hourglass_empty_outlined,
+                color: status == 'Verified' ? Colors.green :
+                status == 'Needs Verification' ? Colors.redAccent : Colors.orangeAccent,
+              ),
+              title: Text(report['text'], maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: Text('Status: $status'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () async {
+                final result = await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (context) => ReportDetailScreen(report: report),
+                ));
+                if (result == true) {
+                  _fetchReports();
+                }
               },
             ),
-          ),
-        Expanded(
-          child: FutureBuilder<List<dynamic>>(
-            future: _reportsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text('Error: ${snapshot.error}\n\nPull down to try again.'),
-                  ),
-                );
-              }
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const Center(child: Text('No reports found.'));
-              }
+          );
+        },
+      );
+    }
 
-              final reports = snapshot.data!;
-
-              // --- FIX: Added RefreshIndicator ---
-              return RefreshIndicator(
-                onRefresh: _fetchReports,
-                child: ListView.builder(
-                  itemCount: reports.length,
-                  itemBuilder: (context, index) {
-                    final report = reports[index];
-                    final status = report['status'] ?? 'Unknown';
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: ListTile(
-                        leading: Icon(
-                          status == 'Verified' ? Icons.verified_user_outlined : Icons.hourglass_empty_outlined,
-                          color: status == 'Verified' ? Colors.green : Colors.orange,
-                        ),
-                        title: Text(report['text'], maxLines: 2, overflow: TextOverflow.ellipsis),
-                        subtitle: Text('Status: $status'),
-                        trailing: const Icon(Icons.arrow_forward_ios),
-                        onTap: () async {
-                          // Navigate and wait for a potential pop result
-                          final result = await Navigator.of(context).push(MaterialPageRoute(
-                            builder: (context) => ReportDetailScreen(report: report),
-                          ));
-                          // If the analyst verified a report, refresh the list
-                          if (result == true) {
-                            _fetchReports();
-                          }
-                        },
-                      ),
-                    );
-                  },
-                ),
-              );
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: SegmentedButton<String>(
+            segments: const <ButtonSegment<String>>[
+              ButtonSegment<String>(value: 'All', label: Text('All'), icon: Icon(Icons.list)),
+              ButtonSegment<String>(value: 'Verified', label: Text('Verified'), icon: Icon(Icons.check_circle_outline)),
+              ButtonSegment<String>(value: 'Pending', label: Text('Pending'), icon: Icon(Icons.hourglass_top_outlined)),
+            ],
+            selected: <String>{_filterStatus},
+            onSelectionChanged: (Set<String> newSelection) {
+              setState(() {
+                _filterStatus = newSelection.first;
+                _applyFilter();
+              });
             },
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _fetchReports,
+            child: content,
           ),
         ),
       ],

@@ -1,11 +1,19 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:bluealert/providers/auth_provider.dart';
 import 'package:bluealert/services/api_service.dart';
+import 'package:bluealert/services/background_service.dart';
 import 'package:bluealert/widgets/video_preview_widget.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart';
 
 class CitizenCreateReportTab extends StatefulWidget {
   const CitizenCreateReportTab({super.key});
@@ -20,68 +28,108 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
   bool _isSubmitting = false;
   bool _isVideoflag = false;
 
+  /// Requests permissions and captures media from the camera.
   Future<void> _captureMedia(ImageSource source, {bool isVideo = false}) async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? file;
-    if (isVideo) {
-      file = await picker.pickVideo(source: source);
-    } else {
-      file = await picker.pickImage(source: source, imageQuality: 80);
-    }
+    // Request permissions just-in-time
+    final cameraStatus = await Permission.camera.request();
+    final micStatus = isVideo ? await Permission.microphone.request() : PermissionStatus.granted;
 
-    if (file != null) {
-      setState(() {
-        _mediaFile = file;
-        _isVideoflag = isVideo;
-      });
+    if (cameraStatus.isGranted && micStatus.isGranted) {
+      final ImagePicker picker = ImagePicker();
+      final XFile? file;
+      if (isVideo) {
+        file = await picker.pickVideo(source: source);
+      } else {
+        file = await picker.pickImage(source: source, imageQuality: 80);
+      }
+
+      if (file != null) {
+        setState(() {
+          _mediaFile = file;
+          _isVideoflag = isVideo;
+        });
+      }
+    } else {
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera and Microphone permissions are required.')),
+        );
+      }
     }
   }
 
+  /// Handles the logic for submitting a report, both online and offline.
   Future<void> _submitReport() async {
     if (_textController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please describe the hazard.'), backgroundColor: Colors.orange,));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please describe the hazard.'), backgroundColor: Colors.orange));
       return;
     }
     setState(() => _isSubmitting = true);
 
     try {
-      // --- FIX: Get AuthProvider and User ID ---
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final token = authProvider.token;
-      final userId = authProvider.user?.id; // Get the user's ID
+      final userId = authProvider.user?.id;
+      if (token == null || userId == null) { throw Exception("Authentication error. Please log in again."); }
 
-      if (token == null || userId == null) {
-        throw Exception("Authentication error. Please log out and log in again.");
-      }
-      // --- END FIX ---
+      final connectivityResult = await (Connectivity().checkConnectivity());
+      final isOnline = connectivityResult.contains(ConnectivityResult.mobile) || connectivityResult.contains(ConnectivityResult.wifi);
 
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
 
-      await ApiService().submitReport(
-        text: _textController.text,
-        lat: position.latitude,
-        lon: position.longitude,
-        token: token,
-        userId: userId, // <-- FIX: Pass the user's ID to the service
-        mediaFile: _mediaFile != null ? File(_mediaFile!.path) : null,
-      );
+      if (isOnline) {
+        // Online: Submit directly to the API
+        await ApiService().submitReport(
+          text: _textController.text,
+          lat: position.latitude, lon: position.longitude,
+          token: token, userId: userId,
+          mediaFile: _mediaFile != null ? File(_mediaFile!.path) : null,
+        );
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report submitted successfully!'), backgroundColor: Colors.green));
+        _clearForm();
+      } else {
+        // Offline: Save the report to a local queue
+        final reportData = {
+          'text': _textController.text,
+          'lat': position.latitude,
+          'lon': position.longitude,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
 
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report submitted successfully!'), backgroundColor: Colors.green,));
+        if (_mediaFile != null) {
+          final directory = await getApplicationDocumentsDirectory();
+          final fileName = p.basename(_mediaFile!.path);
+          // Copy the file to a permanent location so it doesn't get deleted from cache
+          final savedImage = await File(_mediaFile!.path).copy('${directory.path}/$fileName');
+          reportData['mediaPath'] = savedImage.path;
+        }
+
+        final prefs = await SharedPreferences.getInstance();
+        List<String> queuedReports = prefs.getStringList('offline_reports') ?? [];
+        queuedReports.add(jsonEncode(reportData));
+        await prefs.setStringList('offline_reports', queuedReports);
+
+        // Schedule a single, unique background task to kick off the sync chain.
+        // Using 'keep' prevents this from overriding an already scheduled task.
+        await Workmanager().registerOneOffTask(
+          uniqueSyncTaskName, // A single, consistent unique name
+          syncTaskName,
+          existingWorkPolicy: ExistingWorkPolicy.keep,
+          constraints: Constraints(networkType: NetworkType.connected),
+          backoffPolicy: BackoffPolicy.exponential,
+        );
+
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline. Report queued for sync.'), backgroundColor: Colors.orange));
+        _clearForm();
       }
-      _clearForm();
-
     } catch (e) {
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red,));
-      }
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
     } finally {
-      if(mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      if(mounted) { setState(() => _isSubmitting = false); }
     }
   }
 
+  /// Resets the form to its initial state.
   void _clearForm() {
     _textController.clear();
     setState(() {
@@ -92,7 +140,6 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
 
   @override
   Widget build(BuildContext context) {
-    // The build method remains exactly the same as before.
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -120,16 +167,12 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
                 Container(
                   margin: const EdgeInsets.all(4),
                   decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), shape: BoxShape.circle),
-                  child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 20),
-                    onPressed: _clearForm,
-                  ),
+                  child: IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 20), onPressed: _clearForm),
                 ),
               ],
             ),
 
           const SizedBox(height: 20),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -137,7 +180,6 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
               ElevatedButton.icon(onPressed: () => _captureMedia(ImageSource.camera, isVideo: true), icon: const Icon(Icons.videocam_outlined), label: const Text('Video')),
             ],
           ),
-
           const SizedBox(height: 30),
           _isSubmitting
               ? const Center(child: CircularProgressIndicator())

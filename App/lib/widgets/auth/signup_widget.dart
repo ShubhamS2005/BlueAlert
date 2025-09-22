@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:bluealert/providers/auth_provider.dart';
 import 'package:bluealert/screens/auth/verify_email_screen.dart';
@@ -22,21 +23,20 @@ class _SignupWidgetState extends State<SignupWidget> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController(); // <-- NEW CONTROLLER
+  final _confirmPasswordController = TextEditingController();
 
   String _selectedRole = 'Citizen';
   bool _isLoading = false;
   File? _avatarFile;
-
-  // --- NEW: State variables for password visibility ---
   bool _isPasswordHidden = true;
   bool _isConfirmPasswordHidden = true;
 
   void _showErrorDialog(String message) {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('An Error Occurred'),
+        title: const Text('Registration Failed'),
         content: Text(message),
         actions: <Widget>[
           TextButton(
@@ -58,10 +58,7 @@ class _SignupWidgetState extends State<SignupWidget> {
   }
 
   Future<void> _submit() async {
-    // The form validation now includes the password match check automatically
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) { return; }
     if (_avatarFile == null) {
       _showErrorDialog('Please select an avatar image.');
       return;
@@ -69,13 +66,12 @@ class _SignupWidgetState extends State<SignupWidget> {
     setState(() => _isLoading = true);
 
     try {
-      // The API call remains the same as it doesn't need the confirm password
       await Provider.of<AuthProvider>(context, listen: false).register(
         firstname: _fnameController.text,
         lastname: _lnameController.text,
         email: _emailController.text,
         phone: _phoneController.text,
-        password: _passwordController.text, // Send the original password
+        password: _passwordController.text,
         role: _selectedRole,
         avatarFile: _avatarFile!,
       );
@@ -83,9 +79,13 @@ class _SignupWidgetState extends State<SignupWidget> {
         Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const VerifyEmailScreen()));
       }
     } catch (error) {
-      String errorMessage = error.toString();
-      if (errorMessage.startsWith("Exception: ")) {
-        errorMessage = errorMessage.substring(11);
+      String errorMessage = "An unknown error occurred.";
+      if (error is TimeoutException) {
+        errorMessage = "The connection timed out. Please check your internet and try again.";
+      } else if (error is SocketException) {
+        errorMessage = "No internet connection. Please check your network.";
+      } else {
+        errorMessage = error.toString().replaceFirst("Exception: ", "");
       }
       _showErrorDialog(errorMessage);
     } finally {
@@ -102,7 +102,7 @@ class _SignupWidgetState extends State<SignupWidget> {
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose(); // <-- Dispose the new controller
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -112,7 +112,6 @@ class _SignupWidgetState extends State<SignupWidget> {
       key: _formKey,
       child: Column(
         children: [
-          // Avatar Picker UI
           Stack(
             children: [
               CircleAvatar(
@@ -131,8 +130,6 @@ class _SignupWidgetState extends State<SignupWidget> {
             ],
           ),
           const SizedBox(height: kDefaultPadding),
-
-          // --- Standard Text Fields ---
           TextFormField(controller: _fnameController, decoration: kDefaultInputDecoration(hintText: 'First Name'), validator: (v) => v!.isEmpty ? 'Required' : null),
           const SizedBox(height: kDefaultPadding),
           TextFormField(controller: _lnameController, decoration: kDefaultInputDecoration(hintText: 'Last Name'), validator: (v) => v!.isEmpty ? 'Required' : null),
@@ -141,8 +138,6 @@ class _SignupWidgetState extends State<SignupWidget> {
           const SizedBox(height: kDefaultPadding),
           TextFormField(controller: _phoneController, decoration: kDefaultInputDecoration(hintText: 'Phone Number'), keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly], validator: (v) => v!.length != 10 ? 'Must be 10 digits' : null),
           const SizedBox(height: kDefaultPadding),
-
-          // --- MODIFIED: Password Field with Hide/Show Icon ---
           TextFormField(
               controller: _passwordController,
               obscureText: _isPasswordHidden,
@@ -152,11 +147,12 @@ class _SignupWidgetState extends State<SignupWidget> {
                   onPressed: () => setState(() => _isPasswordHidden = !_isPasswordHidden),
                 ),
               ),
-              validator: (v) => v!.length < 6 ? 'Min 6 characters' : null
+              validator: (v) {
+                if (v == null || v.isEmpty) { return 'Please enter a password'; }
+                return null;
+              }
           ),
           const SizedBox(height: kDefaultPadding),
-
-          // --- NEW: Confirm Password Field with Hide/Show Icon and Validation ---
           TextFormField(
               controller: _confirmPasswordController,
               obscureText: _isConfirmPasswordHidden,
@@ -167,17 +163,12 @@ class _SignupWidgetState extends State<SignupWidget> {
                 ),
               ),
               validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please confirm your password';
-                }
-                if (value != _passwordController.text) {
-                  return 'Passwords do not match';
-                }
+                if (value == null || value.isEmpty) { return 'Please confirm your password'; }
+                if (value != _passwordController.text) { return 'Passwords do not match'; }
                 return null;
               }
           ),
           const SizedBox(height: kDefaultPadding),
-
           DropdownButtonFormField<String>(
             value: _selectedRole,
             decoration: kDefaultInputDecoration(hintText: 'Register as'),
@@ -200,7 +191,11 @@ class _SignupWidgetState extends State<SignupWidget> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _submit,
-                style: ElevatedButton.styleFrom(backgroundColor: kSecondaryColor, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kDefaultBorderRadius))),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimaryColor,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kDefaultBorderRadius))
+                ),
                 child: const Text('Create Account', style: kButtonTextStyle),
               ),
             ),

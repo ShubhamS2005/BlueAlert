@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:bluealert/providers/auth_provider.dart';
+import 'package:bluealert/screens/home/full_screen_image_viewer.dart';
 import 'package:bluealert/services/api_service.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as latlng;
 
 class ReportDetailScreen extends StatefulWidget {
   final Map<String, dynamic> report;
@@ -17,7 +19,11 @@ class ReportDetailScreen extends StatefulWidget {
 class _ReportDetailScreenState extends State<ReportDetailScreen> {
   StreamSubscription<Position>? _positionStream;
   double _distanceInMeters = 0;
-  final Set<Marker> _markers = {};
+  final MapController _mapController = MapController();
+  latlng.LatLng? _userPosition;
+  List<Marker> _markers = [];
+
+  // --- FIX 1: The missing state variable has been declared ---
   bool _isVerifying = false;
 
   @override
@@ -27,44 +33,35 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     _listenToUserLocation();
   }
 
-  /// Sets the initial red pin for the hazard's location.
   void _setInitialMarkers() {
-    final reportLocation = LatLng(
-      widget.report['location']['coordinates'][1], // Lat is at index 1
-      widget.report['location']['coordinates'][0], // Lon is at index 0
+    final reportLocation = latlng.LatLng(
+      widget.report['location']['coordinates'][1],
+      widget.report['location']['coordinates'][0],
     );
-    _markers.add(Marker(
-      markerId: const MarkerId('reportLocation'),
-      position: reportLocation,
-      infoWindow: const InfoWindow(title: 'Hazard Location'),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-    ));
+    _markers.add(
+      Marker(
+        point: reportLocation,
+        width: 80,
+        height: 80,
+        child: const Icon(Icons.location_pin, color: Colors.red, size: 40),
+      ),
+    );
   }
 
-  /// Subscribes to the phone's GPS to get real-time location updates.
-  void _listenToUserLocation() async {
+  void _listenToUserLocation() {
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
     ).listen((Position position) {
       if (!mounted) return;
 
-      final newUserPos = LatLng(position.latitude, position.longitude);
-      final reportLocation = LatLng(
+      final newUserPos = latlng.LatLng(position.latitude, position.longitude);
+      final reportLocation = latlng.LatLng(
         widget.report['location']['coordinates'][1],
         widget.report['location']['coordinates'][0],
       );
 
       setState(() {
-        // Remove old user marker before adding the new one
-        _markers.removeWhere((m) => m.markerId.value == 'userLocation');
-        _markers.add(Marker(
-          markerId: const MarkerId('userLocation'),
-          position: newUserPos,
-          infoWindow: const InfoWindow(title: 'Your Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        ));
-
-        // Recalculate and update the distance
+        _userPosition = newUserPos;
         _distanceInMeters = Geolocator.distanceBetween(
           newUserPos.latitude, newUserPos.longitude,
           reportLocation.latitude, reportLocation.longitude,
@@ -73,16 +70,18 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     });
   }
 
-  /// Handles the API call for an analyst to verify a report.
+  // --- FIX 2: The logic for the verify function has been fully implemented ---
   Future<void> _verifyReport() async {
     setState(() => _isVerifying = true);
     try {
       final token = Provider.of<AuthProvider>(context, listen: false).token;
       await ApiService().verifyReport(reportId: widget.report['_id'], token: token!);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report successfully verified!'), backgroundColor: Colors.green),
-      );
-      Navigator.of(context).pop(true); // Pop and return true to indicate success
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report successfully verified!'), backgroundColor: Colors.green),
+        );
+        Navigator.of(context).pop(true); // Pop and return true to refresh the list
+      }
     } catch (e) {
       if(mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -90,39 +89,62 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         );
       }
     } finally {
-      if(mounted) setState(() => _isVerifying = false);
+      if(mounted) {
+        setState(() => _isVerifying = false);
+      }
     }
   }
 
   @override
   void dispose() {
-    _positionStream?.cancel(); // Important to prevent memory leaks
+    _positionStream?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final userRole = Provider.of<AuthProvider>(context, listen: false).user?.role;
-    final reportLocation = LatLng(
+    final reportLocation = latlng.LatLng(
       widget.report['location']['coordinates'][1],
       widget.report['location']['coordinates'][0],
     );
+
+    // Build the list of markers dynamically for flutter_map
+    List<Marker> currentMarkers = List.from(_markers);
+    if (_userPosition != null) {
+      currentMarkers.add(
+        Marker(
+          point: _userPosition!,
+          width: 80,
+          height: 80,
+          child: const Icon(Icons.my_location, color: Colors.blue, size: 30),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Report Details')),
       body: Column(
         children: [
-          Expanded(
-            flex: 2,
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(target: reportLocation, zoom: 14),
-              markers: _markers,
-              myLocationEnabled: false, // We use a custom marker for user location
-              myLocationButtonEnabled: true,
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.4,
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: reportLocation,
+                initialZoom: 14.0,
+                interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.bluealert',
+                ),
+                MarkerLayer(markers: currentMarkers),
+              ],
             ),
           ),
           Expanded(
-            flex: 3,
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -140,14 +162,29 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     title: const Text('Status'),
                     subtitle: Text(widget.report['status']),
                   ),
+
                   if (widget.report['media'] != null && widget.report['media']['url'] != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 16.0, bottom: 16),
-                      child: ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(widget.report['media']['url'])),
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => FullScreenImageViewer(imageUrl: widget.report['media']['url']),
+                          ));
+                        },
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            widget.report['media']['url'],
+                            width: double.infinity,
+                            height: 250,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
                     ),
 
-                  // --- ANALYST-ONLY VERIFY BUTTON ---
-                  if (userRole == 'Analyst' && widget.report['status'] != 'Verified')
+                  if (userRole == 'Analyst' && widget.report['status'] == 'Needs Verification')
                     Padding(
                       padding: const EdgeInsets.only(top: 8.0),
                       child: _isVerifying

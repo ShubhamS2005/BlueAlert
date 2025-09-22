@@ -1,5 +1,6 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:bluealert/providers/auth_provider.dart';
-import 'package:bluealert/screens/auth/forgot_password_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bluealert/constants/app_constants.dart';
@@ -26,19 +27,25 @@ class _LoginWidgetState extends State<LoginWidget> {
     setState(() => _isLoading = true);
 
     try {
-      // --- FIX: Removed the _selectedRole argument ---
-      // The AuthProvider now handles role detection automatically.
       await Provider.of<AuthProvider>(context, listen: false).login(
         _emailController.text,
         _passwordController.text,
       );
-      // --- END FIX ---
-
     } catch (error) {
       if (mounted) {
+        // --- FIX: Improved Error Handling ---
+        String errorMessage = "An unknown error occurred.";
+        if (error is TimeoutException) {
+          errorMessage = "The connection timed out. Please check your internet and try again.";
+        } else if (error is SocketException) {
+          errorMessage = "No internet connection. Please check your network.";
+        } else {
+          errorMessage = error.toString().replaceFirst("Exception: ", "");
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
         );
+        // --- END FIX ---
       }
     } finally {
       if (mounted) {
@@ -53,20 +60,11 @@ class _LoginWidgetState extends State<LoginWidget> {
       key: _formKey,
       child: Column(
         children: [
-          // The role selector dropdown is no longer needed here as the backend logic handles it.
-          // You can remove it for a cleaner UI if you wish, or keep it if you plan to
-          // re-introduce role selection later. For now, it doesn't affect the login logic.
-
           TextFormField(
             controller: _emailController,
             decoration: kDefaultInputDecoration(hintText: 'Email', icon: Icons.email_outlined),
             keyboardType: TextInputType.emailAddress,
-            validator: (value) {
-              if (value == null || !value.contains('@')) {
-                return 'Please enter a valid email';
-              }
-              return null;
-            },
+            validator: (v) => (v == null || !v.contains('@')) ? 'Please enter a valid email' : null,
           ),
           const SizedBox(height: kDefaultPadding),
           TextFormField(
@@ -78,22 +76,9 @@ class _LoginWidgetState extends State<LoginWidget> {
                 onPressed: () => setState(() => _isPasswordHidden = !_isPasswordHidden),
               ),
             ),
-            validator: (value) {
-              if (value == null || value.length < 6) {
-                return 'Password must be at least 6 characters';
-              }
-              return null;
-            },
+            validator: (v) => (v == null || v.isEmpty) ? 'Please enter your password' : null,
           ),
-          const SizedBox(height: kDefaultPadding / 2),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ForgotPasswordScreen())),
-              child: const Text('Forgot Password?', style: TextStyle(color: kBlueLinkColor)),
-            ),
-          ),
-          const SizedBox(height: kDefaultPadding),
+          const SizedBox(height: kDefaultPadding * 2),
           if (_isLoading)
             const CircularProgressIndicator()
           else
@@ -102,7 +87,7 @@ class _LoginWidgetState extends State<LoginWidget> {
               child: ElevatedButton(
                 onPressed: _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kSecondaryColor,
+                  backgroundColor: kPrimaryColor,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kDefaultBorderRadius)),
                 ),
