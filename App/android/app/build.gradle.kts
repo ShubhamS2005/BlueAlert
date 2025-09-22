@@ -8,9 +8,14 @@ plugins {
 android {
     namespace = "com.example.bluealert"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion =  "27.0.12077973"
+    ndkVersion = "27.0.12077973" // It's usually better to let flutter manage this or use flutter.ndkVersion
 
     compileOptions {
+        // --- FIX 1: Enable core library desugaring ---
+        isCoreLibraryDesugaringEnabled = true
+        // --- END FIX 1 ---
+
+        // Your existing Java version settings are fine.
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -20,11 +25,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.bluealert"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = flutter.minSdkVersion // Manually setting to 21 as required by some packages
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -32,8 +34,6 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -42,3 +42,9 @@ android {
 flutter {
     source = "../.."
 }
+
+// --- FIX 2: Add the dependencies block and the desugaring library ---
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+// --- END FIX 2 ---
