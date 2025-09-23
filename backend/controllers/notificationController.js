@@ -7,7 +7,12 @@ import admin from "firebase-admin";
 // 1. In Firebase Console: Project Settings > Service Accounts > Generate new private key.
 // 2. This will download a JSON file. Save it securely in your backend folder (e.g., as serviceAccountKey.json).
 // 3. Add serviceAccountKey.json to your .gitignore file!
-import serviceAccount from "../serviceAccountKey.json" assert { type: "json" };
+import fs from "fs";
+
+const serviceAccount = JSON.parse(
+  fs.readFileSync(new URL("../serviceAccountKey.json", import.meta.url))
+);
+
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -71,4 +76,5 @@ export const sendHazardAlert = async (report) => {
   } catch (error) {
     console.error('Error sending alert message:', error);
   }
+
 };
