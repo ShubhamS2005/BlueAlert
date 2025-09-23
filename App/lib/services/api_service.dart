@@ -6,11 +6,11 @@ import 'package:http_parser/http_parser.dart';
 import 'package:geolocator/geolocator.dart';
 
 class ApiService {
-  static const String _ipAddress = "10.100.159.54";//"10.206.2.54";
+  static const String _ipAddress = "10.206.2.54";//"10.206.2.54";
   static const String _port = "8000";
   static const String baseUrl = "http://$_ipAddress:$_port/api/v1";
-  static const Duration _timeoutDuration = Duration(seconds: 10);
-  static const Duration _uploadTimeoutDuration = Duration(seconds: 10);
+  static const Duration _timeoutDuration = Duration(seconds: 15);
+  static const Duration _uploadTimeoutDuration = Duration(seconds: 60);
 
   Future<Map<String, dynamic>> login(String email, String password, String role) async {
     final response = await http.post(
@@ -19,7 +19,7 @@ class ApiService {
       body: jsonEncode(<String, String>{
         'email': email, 'password': password, 'confirmPassword': password, 'role': role,
       }),
-    ).timeout(_timeoutDuration); // <-- ADDED TIMEOUT
+    ).timeout(_timeoutDuration);
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -128,5 +128,16 @@ class ApiService {
       final error = jsonDecode(response.body);
       throw Exception(error['message'] ?? 'Failed to verify report.');
     }
+  }
+
+  Future<void> registerFcmToken(String fcmToken, String authToken, String role) async {
+    await http.post(
+      Uri.parse('$baseUrl/notification/register-token'),
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Cookie': '${role.toLowerCase()}Token=$authToken',
+      },
+      body: jsonEncode({'token': fcmToken}),
+    ).timeout(const Duration(seconds: 15));
   }
 }

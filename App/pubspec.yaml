@@ -33,12 +33,15 @@ dependencies:
 
   webview_flutter: ^4.7.0
 
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+  url_launcher: ^6.3.1
+  audioplayers: ^6.5.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
+  flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.4.0
-
   flutter_lints: ^5.0.0
 
 flutter:
@@ -47,6 +50,7 @@ flutter:
     - assets/images/
     - assets/images/default_avatar.png
     - assets/web/
+    - assets/sounds/
 
 #splash screen
 flutter_native_splash:
@@ -60,3 +64,6 @@ flutter_native_splash:
 
   android: true
   ios: true
+flutter_launcher_icons:
+  android: "launcher_icon" # or true if you want to use the default name
+  image_path: "assets/icons/app_icon.png"

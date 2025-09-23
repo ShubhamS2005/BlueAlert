@@ -1,16 +1,20 @@
 import 'package:bluealert/constants/app_themes.dart';
 import 'package:bluealert/providers/auth_provider.dart';
 import 'package:bluealert/providers/theme_provider.dart';
-import 'package:bluealert/screens/auth_wrapper.dart';
+import 'package:bluealert/screens/alert_screen.dart';
+import 'package:bluealert/screens/permission_gate_screen.dart'; // <-- Correct starting point
 import 'package:bluealert/services/background_service.dart';
+import 'package:bluealert/services/fcm_background_handler.dart';
 import 'package:bluealert/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
-// This top-level function is the entry point for the background task.
-// It must be defined outside of any class.
-// It delegates all complex logic to our dedicated BackgroundService.
+// GlobalKey for navigation from background services.
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
@@ -19,21 +23,39 @@ void callbackDispatcher() {
 }
 
 void main() async {
-  // Ensure that the Flutter binding is initialized before calling async methods
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize the background task runner
-  await Workmanager().initialize(
-    callbackDispatcher,
-    // This flag is useful for debugging background tasks
-    isInDebugMode: true,
-  );
-
-  // Initialize the notification service for both the main app and background tasks
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
   await NotificationService().initialize();
 
-  // Run the main Flutter application
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    print('Got a message whilst in the foreground!');
+    _handleMessage(message);
+  });
+
+  await _setupInteractedMessage();
   runApp(const MyApp());
+}
+
+Future<void> _setupInteractedMessage() async {
+  RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+  if (initialMessage != null) {
+    _handleMessage(initialMessage);
+  }
+  FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+}
+
+void _handleMessage(RemoteMessage message) {
+  if (message.data['type'] == 'HAZARD_ALERT') {
+    final lat = message.data['lat'];
+    final lon = message.data['lon'];
+    if (lat != null && lon != null) {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => AlertScreen(lat: lat, lon: lon)),
+      );
+    }
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -49,14 +71,14 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
+            navigatorKey: navigatorKey,
             title: 'BlueAlert',
             debugShowCheckedModeBanner: false,
             theme: AppThemes.lightTheme,
             darkTheme: AppThemes.darkTheme,
             themeMode: themeProvider.themeMode,
-            // The AuthWrapper cleanly handles all navigation logic
-            // (Splash -> Auth -> Home)
-            home: const AuthWrapper(),
+            // The app's journey now starts at the PermissionGateScreen.
+            home: const PermissionGateScreen(),
           );
         },
       ),

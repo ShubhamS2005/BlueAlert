@@ -1,19 +1,18 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:bluealert/providers/auth_provider.dart';
 import 'package:bluealert/services/api_service.dart';
-import 'package:bluealert/services/background_service.dart';
 import 'package:bluealert/widgets/video_preview_widget.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:permission_handler/permission_handler.dart';
 
 class CitizenCreateReportTab extends StatefulWidget {
   const CitizenCreateReportTab({super.key});
@@ -28,9 +27,8 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
   bool _isSubmitting = false;
   bool _isVideoflag = false;
 
-  /// Requests permissions and captures media from the camera.
   Future<void> _captureMedia(ImageSource source, {bool isVideo = false}) async {
-    // Request permissions just-in-time
+    // Request permissions just before using the camera/mic
     final cameraStatus = await Permission.camera.request();
     final micStatus = isVideo ? await Permission.microphone.request() : PermissionStatus.granted;
 
@@ -52,13 +50,12 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
     } else {
       if(mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Camera and Microphone permissions are required.')),
+          const SnackBar(content: Text('Camera and Microphone permissions are required to capture media.')),
         );
       }
     }
   }
 
-  /// Handles the logic for submitting a report, both online and offline.
   Future<void> _submitReport() async {
     if (_textController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please describe the hazard.'), backgroundColor: Colors.orange));
@@ -78,7 +75,7 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
 
       if (isOnline) {
-        // Online: Submit directly to the API
+        // Online path: Submit directly
         await ApiService().submitReport(
           text: _textController.text,
           lat: position.latitude, lon: position.longitude,
@@ -88,7 +85,7 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
         if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report submitted successfully!'), backgroundColor: Colors.green));
         _clearForm();
       } else {
-        // Offline: Save the report to a local queue
+        // Offline path: Queue the report
         final reportData = {
           'text': _textController.text,
           'lat': position.latitude,
@@ -99,7 +96,6 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
         if (_mediaFile != null) {
           final directory = await getApplicationDocumentsDirectory();
           final fileName = p.basename(_mediaFile!.path);
-          // Copy the file to a permanent location so it doesn't get deleted from cache
           final savedImage = await File(_mediaFile!.path).copy('${directory.path}/$fileName');
           reportData['mediaPath'] = savedImage.path;
         }
@@ -109,12 +105,9 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
         queuedReports.add(jsonEncode(reportData));
         await prefs.setStringList('offline_reports', queuedReports);
 
-        // Schedule a single, unique background task to kick off the sync chain.
-        // Using 'keep' prevents this from overriding an already scheduled task.
-        await Workmanager().registerOneOffTask(
-          uniqueSyncTaskName, // A single, consistent unique name
-          syncTaskName,
-          existingWorkPolicy: ExistingWorkPolicy.keep,
+        Workmanager().registerOneOffTask(
+          "syncReportsTask-${DateTime.now().millisecondsSinceEpoch}",
+          "syncReportsTask",
           constraints: Constraints(networkType: NetworkType.connected),
           backoffPolicy: BackoffPolicy.exponential,
         );
@@ -129,7 +122,6 @@ class _CitizenCreateReportTabState extends State<CitizenCreateReportTab> {
     }
   }
 
-  /// Resets the form to its initial state.
   void _clearForm() {
     _textController.clear();
     setState(() {

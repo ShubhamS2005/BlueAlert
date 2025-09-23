@@ -4,6 +4,7 @@ import 'package:bluealert/models/user_model.dart';
 import 'package:bluealert/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // Import Firebase Messaging
 
 class AuthProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -27,6 +28,19 @@ class AuthProvider with ChangeNotifier {
         _user = User.fromJson(response['user']);
         _token = response['token'];
 
+        // --- ADDED: After successful login, register the FCM device token ---
+        final fcmToken = await FirebaseMessaging.instance.getToken();
+        if (fcmToken != null) {
+          try {
+            await _apiService.registerFcmToken(fcmToken, _token!, _user!.role);
+            print("FCM Token registered successfully: $fcmToken");
+          } catch (e) {
+            // Log the error, but don't block the login process if FCM registration fails.
+            print("Failed to register FCM token: $e");
+          }
+        }
+        // --- END ADDED BLOCK ---
+
         final prefs = await SharedPreferences.getInstance();
         prefs.setString('token', _token!);
         prefs.setString('userData', jsonEncode(_user!.toJson()));
@@ -35,14 +49,9 @@ class AuthProvider with ChangeNotifier {
         notifyListeners();
         return; // Success! Exit the function.
       } catch (e) {
-        // Store the error and try the next role.
         lastError = e as Exception?;
-        // If the error message is "User with this role not found", we continue silently.
-        // Otherwise, it might be a different error (e.g., wrong password), but we'll still try other roles.
       }
     }
-
-    // If the loop completes without success, throw the last error encountered.
     throw lastError ?? Exception('Invalid credentials or user not found.');
   }
 
@@ -107,12 +116,8 @@ class AuthProvider with ChangeNotifier {
     _token = null;
     _isOffline = false;
     final prefs = await SharedPreferences.getInstance();
-
-    // --- FIX: Only remove auth keys instead of clearing everything ---
     await prefs.remove('token');
     await prefs.remove('userData');
-    // --- END FIX ---
-
     notifyListeners();
   }
 }

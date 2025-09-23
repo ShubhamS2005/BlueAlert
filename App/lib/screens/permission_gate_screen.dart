@@ -2,51 +2,50 @@ import 'package:bluealert/screens/auth_wrapper.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+// An enum to manage the different states of the screen
+enum PermissionState { checking, granted, denied }
+
+class PermissionGateScreen extends StatefulWidget {
+  const PermissionGateScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  State<PermissionGateScreen> createState() => _PermissionGateScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
-  // A state variable to control what the UI shows: the loader or the button.
-  bool _isCheckingPermissions = true;
+class _PermissionGateScreenState extends State<PermissionGateScreen> {
+  PermissionState _state = PermissionState.checking;
 
   @override
   void initState() {
     super.initState();
-    // Start the permission check as soon as the screen is built.
     _checkInitialPermissions();
   }
 
-  /// Checks permissions status WITHOUT asking. Navigates away if already granted.
+  /// Checks permissions status without asking. Navigates away if already granted.
   Future<void> _checkInitialPermissions() async {
-    final permissions = [
-      Permission.location,
-      Permission.camera,
-      Permission.microphone,
-      Permission.notification,
-      Permission.systemAlertWindow,
-    ];
+    // Check the status of all critical permissions.
+    final locationStatus = await Permission.location.status;
+    final cameraStatus = await Permission.camera.status;
+    final notificationStatus = await Permission.notification.status;
+    final alertWindowStatus = await Permission.systemAlertWindow.status;
 
-    // Get the status of all permissions.
-    final statuses = await Future.wait(permissions.map((p) => p.status));
-
-    // If every permission is already granted, navigate immediately to the app.
-    if (statuses.every((status) => status.isGranted)) {
+    if (locationStatus.isGranted &&
+        cameraStatus.isGranted &&
+        notificationStatus.isGranted &&
+        alertWindowStatus.isGranted) {
+      // If everything is already granted, navigate immediately to the app.
       _navigateToApp();
     } else {
-      // If not, update the state to stop the loading spinner and show the permission request UI.
+      // If not, update the state to show the permission request UI.
       if (mounted) {
         setState(() {
-          _isCheckingPermissions = false;
+          _state = PermissionState.denied;
         });
       }
     }
   }
 
-  /// Navigates to the main app logic (the AuthWrapper).
+  /// Navigates to the main app logic (AuthWrapper).
   void _navigateToApp() {
     if (mounted) {
       Navigator.of(context).pushReplacement(
@@ -55,9 +54,8 @@ class _SplashScreenState extends State<SplashScreen> {
     }
   }
 
-  /// This function is called when the user presses the "Grant Permissions" button.
+  /// Asks the user for permissions when the button is pressed.
   Future<void> _requestPermissions() async {
-    // Request all permissions. This will show the system's permission dialogs.
     await [
       Permission.location,
       Permission.camera,
@@ -66,40 +64,55 @@ class _SplashScreenState extends State<SplashScreen> {
       Permission.systemAlertWindow,
     ].request();
 
-    // After the user has responded, check the status again.
+    // After the request, check again.
     final areGranted = await _areAllPermissionsGranted();
     if (areGranted) {
       _navigateToApp();
     } else {
-      // --- FIX: The popup dialog is GONE ---
-      // If permissions are still denied, we simply do nothing. The user
-      // remains on this screen and can choose to press the button again
-      // or go to their phone's settings manually. No annoying popup.
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Some permissions were denied. Please grant all permissions to continue.')),
-        );
-      }
+      // Only show the "Open Settings" popup if the user has permanently denied a permission.
+      _showPermissionDeniedDialog();
     }
   }
 
   /// A helper to re-check all permissions after a request.
   Future<bool> _areAllPermissionsGranted() async {
-    final statuses = await Future.wait([
-      Permission.location.status,
-      Permission.camera.status,
-      Permission.microphone.status,
-      Permission.notification.status,
-      Permission.systemAlertWindow.status,
-    ]);
-    return statuses.every((status) => status.isGranted);
+    final statuses = await [
+      Permission.location,
+      Permission.camera,
+      Permission.notification,
+      Permission.systemAlertWindow,
+    ].map((p) => p.status).toList();
+
+    final results = await Future.wait(statuses);
+    return results.every((status) => status.isGranted);
   }
 
+  void _showPermissionDeniedDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text("Permissions Required"),
+        content: const Text(
+            "BlueAlert requires critical permissions to function. Please manually grant them from your device settings to continue."),
+        actions: <Widget>[
+          TextButton(
+            child: const Text("Open Settings"),
+            onPressed: () {
+              openAppSettings();
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Show a loading UI while checking permissions initially.
-    if (_isCheckingPermissions) {
+    // Show a loading screen while checking permissions initially.
+    if (_state == PermissionState.checking) {
       return Scaffold(
         body: Center(
           child: Column(
@@ -108,8 +121,6 @@ class _SplashScreenState extends State<SplashScreen> {
               Image.asset('assets/images/foreground.png', width: 150),
               const SizedBox(height: 30),
               const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              const Text("Initializing..."),
             ],
           ),
         ),

@@ -21,7 +21,7 @@ const kHeadlineTextStyle = TextStyle(
 );
 
 // --- API CONSTANT ---
-const String kApiBaseUrl = "http://10.100.159.54:8000/api/v1";
+const String kApiBaseUrl = "http://10.206.2.54:8000/api/v1";
 
 const kSubheadlineTextStyle = TextStyle(
   fontSize: 16,

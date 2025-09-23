@@ -1,3 +1,13 @@
+// This block defines plugins for the entire project but doesn't apply them yet.
+// This is the correct KTS way to make plugins available to subprojects.
+plugins {
+    // --- FIX: Define the google-services plugin here ---
+    id("org.jetbrains.kotlin.android") apply false
+    id("com.google.gms.google-services") version "4.4.1" apply false
+
+
+}
+
 allprojects {
     repositories {
         google()

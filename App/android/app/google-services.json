@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "591194533030",
+    "project_id": "bluealert-dcc55",
+    "storage_bucket": "bluealert-dcc55.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:591194533030:android:61db3319a26ffed8cdd867",
+        "android_client_info": {
+          "package_name": "com.example.bluealert"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7B8gZJ_ZQHnoaDVr5TKZG96cU-uN7mgY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
