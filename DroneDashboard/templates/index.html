@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>RescueVision Command Center</title>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at 30% 30%, #0a0f1c, #000);
+            color: #e6edf3;
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ===== TITLE BAR ===== */
+        #title-bar {
+            width: 100%;
+            text-align: center;
+            padding: 16px 0;
+            background: linear-gradient(90deg, #1f6feb, #58a6ff, #1fff72);
+            background-size: 200% 200%;
+            color: white;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            box-shadow: 0 0 30px #1f6feb80;
+            text-shadow: 0 0 20px rgba(31, 255, 114, 0.7);
+            animation: gradientShift 6s infinite alternate;
+        }
+
+        @keyframes gradientShift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            100% {
+                background-position: 100% 50%;
+            }
+        }
+
+        /* ===== LAYOUT ===== */
+        #main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ===== VIDEO CONTAINER ===== */
+        #video-container {
+            flex: 2.5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            position: relative;
+            border-right: 2px solid #1f6feb40;
+            padding-top: 40px;
+        }
+
+        #status-banner {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #161b22;
+            border: 2px solid #1f6feb;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 16px;
+            box-shadow: 0 0 10px #1f6feb80;
+            transition: all 0.3s ease;
+        }
+
+        #status-banner.active {
+            border-color: #1fff72;
+            box-shadow: 0 0 20px #1fff7280;
+            color: #1fff72;
+        }
+
+        #status-banner.inactive {
+            border-color: #ff4747;
+            box-shadow: 0 0 20px #ff474780;
+            color: #ff4747;
+        }
+
+        #frame {
+            width: 960px;
+            height: 580px;
+            border: 3px solid #1f6feb;
+            border-radius: 16px;
+            box-shadow: 0 0 25px #1f6feb80;
+            background: #050a12;
+            object-fit: cover;
+            transition: 0.3s ease;
+        }
+
+        /* Fullscreen Button */
+        #fullscreen-btn {
+            position: absolute;
+            top: 20px;
+            right: 25px;
+            background: #1f6feb;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 20px;
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: 0.3s ease;
+            box-shadow: 0 0 10px #1f6feb80;
+        }
+
+        #fullscreen-btn:hover {
+            background: #58a6ff;
+        }
+
+        /* ===== PERSON TABLE ===== */
+        #persons-container {
+            width: 900px;
+            margin-top: 14px;
+            background: #161b22;
+            border: 2px solid #1f6feb60;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 0 15px #1f6feb40;
+            font-size: 14px;
+            overflow-y: auto;
+            /* 🔹 Enable vertical scroll */
+            max-height: 280px;
+            /* 🔹 Limit height */
+        }
+
+
+        #persons-container b {
+            display: block;
+            color: #58a6ff;
+            margin-bottom: 8px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .person-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr 2fr;
+            gap: 6px;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .person-header {
+            font-weight: 600;
+            color: #1fff72;
+            border-bottom: 1px solid #1f6feb50;
+            padding-bottom: 4px;
+        }
+
+        /* ===== SIDE PANEL ===== */
+        #side-panel {
+            flex: 0.8;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+
+        .telemetry-box {
+            background: #161b22;
+            border: 2px solid #1f6feb60;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 0 15px #1f6feb40;
+        }
+
+        .telemetry-title {
+            font-size: 18px;
+            color: #58a6ff;
+            margin-bottom: 8px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .telemetry-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px dashed #1f6feb30;
+            align-items: center;
+        }
+
+        .bar-container {
+            width: 70%;
+            height: 10px;
+            background: #0a0f1c;
+            border: 1px solid #1f6feb60;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-left: 8px;
+        }
+
+        .bar {
+            height: 100%;
+            width: 0%;
+            background: #1fff72;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+
+        /* ===== RADAR ===== */
+        #radarCanvas {
+            background: radial-gradient(circle at center, #001020, #000);
+            height: 30%;
+            border-radius: 50%;
+            border: 2px solid #1fff72;
+            box-shadow: 0 0 25px #1fff72, inset 0 0 20px #1fff72;
+            margin: auto;
+            display: block;
+            margin-top: 7px;
+            margin-bottom: 7px;
+
+        }
+
+        /* ===== MAP ===== */
+        #map {
+            height: 55%;
+            border-radius: 12px;
+            border: 2px solid #1f6feb50;
+            box-shadow: 0 0 20px #1f6feb40;
+            margin-top: 5px;
+            margin-bottom: 4px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 6px;
+            font-size: 12px;
+            color: #6e7681;
+            background: #0a0f1c;
+            border-top: 1px solid #1f6feb30;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="title-bar">🚁 RescueVision Command Center</div>
+
+    <div id="main">
+        <div id="video-container">
+            <div id="status-banner" class="inactive">🔴 No Camera Feed</div>
+            <button id="fullscreen-btn">🔳</button>
+            <img id="frame" src="" alt="Drone feed not available">
+            <div id="persons-container">
+                <b>Detected Persons</b>
+                <div class="person-grid" id="persons">
+                    <div class="person-header">#</div>
+                    <div class="person-header">Coordinates</div>
+                    <div class="person-header">Timestamp</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="side-panel">
+            <div class="telemetry-box">
+                <div class="telemetry-title">🛰️ Drone Telemetry</div>
+                <div class="telemetry-item"><span>Altitude:</span> <span id="altitude">-- m</span></div>
+                <div class="telemetry-item"><span>Battery:</span>
+                    <div class="bar-container">
+                        <div id="batteryBar" class="bar"></div>
+                    </div>
+                </div>
+                <div class="telemetry-item"><span>Signal:</span>
+                    <div class="bar-container">
+                        <div id="signalBar" class="bar"></div>
+                    </div>
+                </div>
+            </div>
+            <canvas id="radarCanvas" width="300" height="300"></canvas>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <footer>© 2025 RescueVision | Advanced UAV Monitoring System</footer>
+
+    <script>
+        const socket = io.connect("http://localhost:5000");
+        const img = document.getElementById('frame');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const radarCanvas = document.getElementById('radarCanvas');
+        const ctx = radarCanvas.getContext('2d');
+        const personsEl = document.getElementById('persons');
+        const altitudeEl = document.getElementById('altitude');
+        const batteryBar = document.getElementById('batteryBar');
+        const signalBar = document.getElementById('signalBar');
+        const statusBanner = document.getElementById('status-banner');
+
+        const COER_LAT = 29.893347, COER_LNG = 77.961396;
+        const map = L.map('map').setView([COER_LAT, COER_LNG], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 15 }).addTo(map);
+        const droneMarker = L.marker([COER_LAT, COER_LNG]).addTo(map);
+
+        let personMarkers = [], radarAngle = 0, detectedPersons = [], sweepHistory = [];
+        let lastRadarTime = performance.now();
+        const clusterRadius = 40;
+
+        // Fullscreen toggle
+        fullscreenBtn.onclick = () => !document.fullscreenElement ? img.requestFullscreen() : document.exitFullscreen();
+
+        // --- RADAR STATIC BACKGROUND ---
+        const staticRadar = document.createElement('canvas');
+        staticRadar.width = radarCanvas.width;
+        staticRadar.height = radarCanvas.height;
+        const staticCtx = staticRadar.getContext('2d');
+
+        function drawRadarStatic() {
+            const cw = radarCanvas.width, ch = radarCanvas.height;
+            const grd = staticCtx.createRadialGradient(cw / 2, ch / 2, 10, cw / 2, ch / 2, cw / 2);
+            grd.addColorStop(0, 'rgba(0,0,0,0.6)');
+            grd.addColorStop(1, 'rgba(0,0,0,0.95)');
+            staticCtx.fillStyle = grd;
+            staticCtx.fillRect(0, 0, cw, ch);
+
+            for (let r = 40; r <= cw / 2 - 10; r += 40) {
+                staticCtx.beginPath();
+                staticCtx.arc(cw / 2, ch / 2, r, 0, 2 * Math.PI);
+                staticCtx.strokeStyle = 'rgba(0,255,0,0.3)';
+                staticCtx.lineWidth = 2;
+                staticCtx.stroke();
+            }
+        }
+        drawRadarStatic();
+
+        // --- DETECTED PERSONS UPDATE ---
+        function updateDetectedPersons(dataPersons) {
+            detectedPersons = dataPersons.map((p, i) => {
+                let existing = detectedPersons.find(dp => dp.id === i + 1);
+                return {
+                    id: i + 1,
+                    lat: p.lat,
+                    lng: p.lng,
+                    time: new Date().toLocaleTimeString(),
+                    angle: existing?.angle ?? Math.random() * Math.PI * 2,
+                    distance: existing?.distance ?? Math.random() * clusterRadius,
+                    blink: existing?.blink ?? true,
+                    blinkTimer: existing?.blinkTimer ?? Math.random() * 1000
+                };
+            });
+        }
+
+        // --- BLINKING DOTS TICK ---
+        function tickBlink(deltaTime) {
+            detectedPersons.forEach(p => {
+                p.blinkTimer -= deltaTime;
+                if (p.blinkTimer <= 0) {
+                    p.blink = !p.blink;
+                    p.blinkTimer = 600 + Math.random() * 600;
+                }
+            });
+        }
+
+        // --- DRAW RADAR ---
+        function drawRadar() {
+            const now = performance.now();
+            const deltaTime = now - lastRadarTime;
+            if (deltaTime < 33) { // throttle ~30 FPS
+                requestAnimationFrame(drawRadar);
+                return;
+            }
+            lastRadarTime = now;
+
+            tickBlink(deltaTime);
+
+            const cw = radarCanvas.width, ch = radarCanvas.height;
+            ctx.clearRect(0, 0, cw, ch);
+            ctx.drawImage(staticRadar, 0, 0);
+
+            // Sweep
+            sweepHistory.push(radarAngle);
+            if (sweepHistory.length > 35) sweepHistory.shift();
+            sweepHistory.forEach((angle, idx) => {
+                const alpha = idx / sweepHistory.length * 0.3;
+                ctx.beginPath();
+                ctx.moveTo(cw / 2, ch / 2);
+                ctx.arc(cw / 2, ch / 2, cw / 2 - 10, angle, angle + 0.05);
+                ctx.closePath();
+                ctx.fillStyle = `rgba(0,255,0,${alpha})`;
+                ctx.fill();
+            });
+
+            // Red dots
+            detectedPersons.forEach(p => {
+                if (p.blink) {
+                    const x = cw / 2 + Math.cos(p.angle) * p.distance;
+                    const y = ch / 2 + Math.sin(p.angle) * p.distance;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'red';
+                    ctx.fill();
+                }
+            });
+
+            radarAngle += 0.04;
+            requestAnimationFrame(drawRadar);
+        }
+        drawRadar();
+
+        // --- SOCKET DATA ---
+        let lastPersonHTML = '';
+        socket.on('drone_frame', data => {
+            if (data.frame) {
+                img.src = 'data:image/jpeg;base64,' + data.frame;
+                statusBanner.textContent = "🟢 Live Feed Active";
+                statusBanner.classList.replace("inactive", "active");
+            }
+            if (data.telemetry) {
+                const t = data.telemetry;
+                altitudeEl.textContent = (t.altitude || 12) + " m";
+                batteryBar.style.width = (t.battery || 82) + "%";
+                signalBar.style.width = (t.signal || 76) + "%";
+                if (t.lat && t.lng) { droneMarker.setLatLng([t.lat, t.lng]); }
+            }
+            if (Array.isArray(data.personsDetected)) {
+                updateDetectedPersons(data.personsDetected);
+
+                // --- PERSON TABLE UPDATE ---
+                const newHTML = '<div class="person-header">#</div><div class="person-header">Coordinates</div><div class="person-header">Timestamp</div>' +
+                    detectedPersons.map(p => `<div>${p.id}</div><div>(${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})</div><div>${p.time}</div>`).join('');
+                if (newHTML !== lastPersonHTML) {
+                    personsEl.innerHTML = newHTML;
+                    lastPersonHTML = newHTML;
+                }
+
+                // --- MAP MARKERS UPDATE ---
+                if (personMarkers.length !== detectedPersons.length) {
+                    // rebuild markers if count changed
+                    personMarkers.forEach(m => map.removeLayer(m));
+                    personMarkers = detectedPersons.map(p => L.circleMarker([p.lat, p.lng], { radius: 6, color: '#1fff73' }).addTo(map));
+                } else {
+                    // move existing markers
+                    detectedPersons.forEach((p, i) => {
+                        personMarkers[i].setLatLng([p.lat, p.lng]);
+                    });
+                }
+            }
+        });
+    </script>
+
+</body>
+
+</html>
+
