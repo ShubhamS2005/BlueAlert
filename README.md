@@ -1,4 +1,4 @@
-BlueAlert – Real-Time Coastal Hazard Monitoring System
+BlueAlert – Real-Time Coastal Hazard Monitoring System 
 
 An Integrated Platform for Crowdsourced Ocean Hazard Reporting and Social Media Analytics
 
