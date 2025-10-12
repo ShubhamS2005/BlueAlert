@@ -21,7 +21,7 @@ const kHeadlineTextStyle = TextStyle(
 );
 
 // --- API CONSTANT ---
-const String kApiBaseUrl = "http://10.206.2.54:8000/api/v1";
+const String kApiBaseUrl = "192.168.137.23:8000/api/v1";//"https://bluealert-4.onrender.com/api/v1";
 
 const kSubheadlineTextStyle = TextStyle(
   fontSize: 16,
@@ -38,9 +38,8 @@ const kButtonTextStyle = TextStyle(
 InputDecoration kDefaultInputDecoration({required String hintText, IconData? icon}) {
   return InputDecoration(
     hintText: hintText,
-    prefixIcon: icon != null ? Icon(icon, color: kPrimaryColor) : null, // Uses primary cyan for icons
-    filled: true,
-    fillColor: kLightColor.withOpacity(0.5), // Uses the new light cyan tint
+    prefixIcon: icon != null ? Icon(icon, color: kPrimaryColor) : null,     filled: true,
+    fillColor: kLightColor.withOpacity(0.5),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(kDefaultBorderRadius),
       borderSide: BorderSide.none,

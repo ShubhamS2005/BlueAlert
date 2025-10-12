@@ -6,11 +6,11 @@ import 'package:http_parser/http_parser.dart';
 import 'package:geolocator/geolocator.dart';
 
 class ApiService {
-  static const String _ipAddress = "10.206.2.54";//"10.206.2.54";
+  static const String _ipAddress = "192.168.137.23";//"10.206.2.54";
   static const String _port = "8000";
-  static const String baseUrl = "http://$_ipAddress:$_port/api/v1";
-  static const Duration _timeoutDuration = Duration(seconds: 15);
-  static const Duration _uploadTimeoutDuration = Duration(seconds: 60);
+  static const String baseUrl = "http://$_ipAddress:$_port/api/v1";//"https://bluealert-4.onrender.com/api/v1";
+  static const Duration _timeoutDuration = Duration(seconds: 20);
+  static const Duration _uploadTimeoutDuration = Duration(seconds: 20);
 
   Future<Map<String, dynamic>> login(String email, String password, String role) async {
     final response = await http.post(
@@ -40,7 +40,7 @@ class ApiService {
     });
     request.files.add(await http.MultipartFile.fromPath('userAvatar', avatarFile.path, contentType: MediaType('image', 'jpeg')));
 
-    final streamedResponse = await request.send().timeout(_uploadTimeoutDuration); // <-- ADDED TIMEOUT
+    final streamedResponse = await request.send().timeout(_uploadTimeoutDuration);
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
@@ -56,7 +56,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$baseUrl/user$endpoint'),
       headers: {'Content-Type': 'application/json', 'Cookie': '${role.toLowerCase()}Token=$token'},
-    ).timeout(_timeoutDuration); // <-- ADDED TIMEOUT
+    ).timeout(_timeoutDuration);
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -76,7 +76,7 @@ class ApiService {
       request.files.add(await http.MultipartFile.fromPath('media', mediaFile.path, contentType: MediaType('image', 'jpeg')));
     }
 
-    final streamedResponse = await request.send().timeout(_uploadTimeoutDuration); // <-- ADDED TIMEOUT
+    final streamedResponse = await request.send().timeout(_uploadTimeoutDuration);
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 201) {
@@ -104,7 +104,7 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$baseUrl$endpoint'),
       headers: {'Content-Type': 'application/json', 'Cookie': '$cookieName=$token'},
-    ).timeout(_timeoutDuration); // <-- ADDED TIMEOUT
+    ).timeout(_timeoutDuration);
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['reports'];
@@ -120,7 +120,7 @@ class ApiService {
       Uri.parse('$baseUrl/report/analyst/verify/$reportId'),
       headers: {'Content-Type': 'application/json; charset=UTF-8', 'Cookie': 'analystToken=$token'},
       body: jsonEncode(<String, String>{'status': 'Verified'}),
-    ).timeout(_timeoutDuration); // <-- ADDED TIMEOUT
+    ).timeout(_timeoutDuration);
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);

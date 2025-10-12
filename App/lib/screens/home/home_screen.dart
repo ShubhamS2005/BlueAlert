@@ -5,8 +5,7 @@ import 'tabs/citizen/citizen_create_report_tab.dart';
 import 'tabs/analyst/analyst_reports_feed_tab.dart';
 import 'tabs/citizen/citizen_profile_tab.dart';
 import 'tabs/shared/reports_feed_tab.dart';
-import 'tabs/shared/hotspot_tab.dart'; // <-- IMPORT the renamed HotspotTab
-
+import 'tabs/shared/hotspot_tab.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 

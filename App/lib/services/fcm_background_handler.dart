@@ -4,7 +4,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Initialize services needed for the background task
   await Firebase.initializeApp();
   await NotificationService().initialize();
 
@@ -17,8 +16,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final body = message.notification?.body ?? 'A new hazard has been verified.';
 
     if (lat != null && lon != null) {
-      // This is the only responsibility of the handler.
-      // It triggers the notification that the OS will use to launch the full-screen intent.
+      // This function call triggers the full-screen intent.
       await NotificationService().showFullScreenHazardAlert(
         title: title,
         body: body,

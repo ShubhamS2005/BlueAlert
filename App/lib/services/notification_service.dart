@@ -44,7 +44,7 @@ class NotificationService {
       'Hazard Alerts', // User-visible name in the app's notification settings
       description: 'Full-screen notifications for critical hazard alerts.',
       importance: Importance.max, // Highest importance
-      playSound: true,
+      playSound: false,
       enableVibration: true,
     );
 
@@ -128,7 +128,7 @@ class NotificationService {
         importance: Importance.max,
         priority: Priority.high,
         fullScreenIntent: true, // This is the key property to trigger the full-screen UI
-        playSound: true,
+        playSound: false,
         enableVibration: true,
       ),
     );
